@@ -1,0 +1,62 @@
+# Kconfig at the project root
+
+mainmenu "Nordic Thingy:91 X Firmware Platform"
+
+# Import Zephyr's configuration symbols
+source "Kconfig.zephyr"
+
+menu "Application Profiles"
+
+choice APP_PROFILE
+    prompt "Active Application Profile"
+    default APP_PROFILE_HELLO_WORLD
+    help
+      Select which application module profile to compile.
+
+config APP_PROFILE_HELLO_WORLD
+    bool "Hello World (Testing/Diagnostic)"
+    help
+      Compiles a simple hello world application for basic hardware validation.
+
+config APP_PROFILE_ASSET_TRACKER
+    bool "Asset Tracker (Long Life)"
+    help
+      Compiles the long-life asset tracking application utilizing low-power LTE-M/NB-IoT, GNSS, and sensing.
+
+config APP_PROFILE_AUTOPILOT
+    bool "Autopilot System (Real-time)"
+    help
+      Compiles the real-time autopilot/controller application with high-rate IMU loops and navigation control.
+
+config APP_PROFILE_ENV_MONITOR
+    bool "Environmental Sensor Node"
+    help
+      Compiles the environmental monitoring node using low-power local sensors and occasional telemetry uplinks.
+
+config APP_PROFILE_TRAVEL_HISTORY
+    bool "Travel History Log Node"
+    help
+      Compiles the travel history application, logging GNSS/IMU/Attitude data every 1 second to flash.
+
+endchoice
+
+endmenu
+
+menu "Application Thread Configurations"
+    depends on !APP_PROFILE_HELLO_WORLD
+
+config APP_MAIN_THREAD_PRIORITY
+    int "Main Application Thread Priority"
+    default 5 if APP_PROFILE_ASSET_TRACKER || APP_PROFILE_ENV_MONITOR || APP_PROFILE_TRAVEL_HISTORY
+    default -10 if APP_PROFILE_AUTOPILOT
+    help
+      Define the execution priority of the main application thread.
+      Use negative values (cooperative threads) for time-critical profiles like Autopilot to prevent preemption.
+
+config APP_MAIN_THREAD_STACK_SIZE
+    int "Main Application Thread Stack Size"
+    default 2048
+    help
+      Define stack size (in bytes) for the main application thread.
+
+endmenu

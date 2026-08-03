@@ -1,0 +1,12 @@
+#ifndef APP_CONFIG_H
+#define APP_CONFIG_H
+
+/* 
+ * Profile-specific configurations for the Asset Tracker profile.
+ * Define thresholds, intervals, and feature toggles here.
+ */
+
+#define TELEMETRY_PUBLISH_INTERVAL_SEC   60
+#define LOW_BATTERY_THRESHOLD_PERCENT    15
+
+#endif

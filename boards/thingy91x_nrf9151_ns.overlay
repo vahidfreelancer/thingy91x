@@ -1,0 +1,31 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/*
+ * Device Tree Overlay Template for Nordic Thingy:91 X (nRF9151 NS target)
+ * Use this file to customize pin routing, sensor configurations, and enabled buses.
+ */
+
+/ {
+	aliases {
+		/* Add application-specific aliases here */
+		// sensor-imu = &imu;
+	};
+};
+
+/* Example: Configuring the I2C peripheral for environmental sensors */
+&i2c2 {
+	status = "okay";
+	/* Custom clock frequency or sensor parameters can be overridden here */
+	clock-frequency = <I2C_BITRATE_FAST>;
+};
+
+/* Example: Enabling low power states on UART console */
+&uart0 {
+	status = "okay";
+	/* Enable power management control for the UART driver */
+	/delete-property/ hw-flow-control;
+};

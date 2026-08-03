@@ -1,0 +1,56 @@
+These files were built with nRF Connect SDK version v3.2.1
+from sdk-nrf repository (https://github.com/nrfconnect/sdk-nrf)
+
+Full commit SHA: d8887f6f32df9e958f393d3490f00b5c4ef88601
+
+Folder contents:
+img_app_bl/
+  - Full application images including bootloader.
+  - These files can be used with:
+    - nRF Connect Programmer (only with SEGGER J-Link or another debug probe).
+    - nRF Util CLI.
+ img_dfu_zip/
+  - These images contain only application and bootloader is not included.
+  - Images are in binary format.
+  - These files can be used with:
+    - Over-the-air update, for example, through nRF Cloud, Azure or AWS.
+    - nRF Util CLI.
+img_fota_dfu_hex/
+  - These images contain only application and bootloader is not included.
+  - Images are in HEX format.
+  - These files can be used with nRF Connect Programmer (only through USB bootloader).
+img_fota_dfu_bin/
+  - These images contain only application and bootloader is not included.
+  - Images are in binary format.
+  - These files can be used with:
+    - Over-the-air update, for example, through nRF Cloud, Azure or AWS.
+    - nRF Util CLI.
+
+The following folders contain images configured for modem debugging:
+  - img_app_bl/debug
+  - img_fota_dfu_hex/debug
+  - img_fota_dfu_bin/debug
+
+File                                                                        Description
+--------------------------------------------------------------------------  ------------------------------------------------------------------------
+img_app_bl/debug/thingy91x_hello.nrfcloud.com_v3.0.1_debug.hex              Out-of-box application, modem trace enabled
+img_app_bl/debug/thingy91x_modem_shell_debug_2026-02-24_d8887f6f.hex        Modem shell, modem uart debug enabled
+img_app_bl/thingy91x_asset_tracker_template_v1.2.9.hex                      Asset Tracker Template
+img_app_bl/thingy91x_at_client_2026-02-24_d8887f6f.hex                      Firmware for direct modem communication
+img_app_bl/thingy91x_hello.nrfcloud.com_v3.0.1.hex                          Out-of-box application
+img_app_bl/thingy91x_modem_shell_2026-02-24_d8887f6f.hex                    Modem shell
+img_app_bl/thingy91x_nrf53_connectivity_bridge_v3.0.1.hex                   Connectivity bridge
+img_app_bl/thingy91x_serial_modem_v1.0.0.hex                                Serial modem application
+img_dfu_zip/debug/thingy91x_modem_shell_debug_2026-02-24_d8887f6f.zip       Modem shell, modem uart debug enabled
+img_dfu_zip/thingy91x_asset_tracker_template_v1.2.9.zip                     Asset Tracker Template
+img_dfu_zip/thingy91x_at_client_2026-02-24_d8887f6f.zip                     Firmware for direct modem communication
+img_dfu_zip/thingy91x_hello.nrfcloud.com_v3.0.1.zip                         Out-of-box application
+img_dfu_zip/thingy91x_modem_shell_2026-02-24_d8887f6f.zip                   Modem shell
+img_dfu_zip/thingy91x_serial_modem_v1.0.0.zip                               Serial modem application
+img_fota_dfu_bin/debug/thingy91x_modem_shell_debug_2026-02-24_d8887f6f.bin  Modem shell, modem uart debug enabled
+img_fota_dfu_bin/thingy91x_at_client_2026-02-24_d8887f6f.bin                Firmware for direct modem communication
+img_fota_dfu_bin/thingy91x_modem_shell_2026-02-24_d8887f6f.bin              Modem shell
+img_fota_dfu_hex/debug/thingy91x_modem_shell_debug_2026-02-24_d8887f6f.hex  Modem shell, modem uart debug enabled
+img_fota_dfu_hex/thingy91x_at_client_2026-02-24_d8887f6f.hex                Firmware for direct modem communication
+img_fota_dfu_hex/thingy91x_modem_shell_2026-02-24_d8887f6f.hex              Modem shell
+mfw_nrf91x1_2.0.4.zip                                                       Modem firmware, update via nRFConnect for Desktop Programmer application

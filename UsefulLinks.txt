@@ -1,0 +1,4 @@
+https://www.nordicsemi.com/Products/Development-hardware/Nordic-Thingy-53/Downloads
+https://www.nordicsemi.com/Products/Development-hardware/Nordic-Thingy-91-X
+https://www.nordicsemi.com/Products/Development-software/nRF-Connect-SDK
+https://www.nordicsemi.com/Products/Development-tools/nRF-Util/Download#infotabs

@@ -1,0 +1,19 @@
+* text=auto
+
+*.c      text
+*.h      text
+*.cpp    text
+*.hpp    text
+*.cmake  text
+*.conf   text
+*.overlay text
+*.dts    text
+*.dtsi   text
+*.md     text
+*.yml    text
+*.yaml   text
+
+*.bin    binary
+*.hex    binary
+*.elf    binary
+*.uf2    binary

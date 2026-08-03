@@ -1,0 +1,28 @@
+{
+    "format-version": 1,
+    "time": 1760420696,
+    "files": [
+        {
+            "type": "application",
+            "board": "thingy91x",
+            "soc": "nrf9151",
+            "load_address": 229376,
+            "image_index": "0",
+            "slot_index_primary": "1",
+            "slot_index_secondary": "2",
+            "version_MCUBOOT": "3.0.1+0",
+            "size": 593967,
+            "file": "app.signed.bin",
+            "modtime": 1760420696
+        }
+    ],
+    "name": "app",
+    "firmware": {
+        "zephyr": {
+            "revision": "1612683d4010b571be79f21d86edf683aac37679"
+        },
+        "nrf": {
+            "revision": "6c6e5b32496eb7203f4c52ae9b3575949eab522e"
+        }
+    }
+}
