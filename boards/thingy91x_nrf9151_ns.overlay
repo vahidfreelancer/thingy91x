@@ -36,6 +36,12 @@
 		reg = <0x6b>;
 		label = "NPM1300_PMIC";
 	};
+
+	bmm150: bmm150@10 {
+		compatible = "bosch,bmm150";
+		reg = <0x10>;
+		label = "BMM150_MAGNETOMETER";
+	};
 };
 
 /* Example: Enabling low power states on UART console */

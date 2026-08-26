@@ -6,6 +6,7 @@ target_sources(app PRIVATE
     ../../platform/drivers/pmic/pmic.c
     ../../platform/drivers/led/led.c
     ../../platform/drivers/buttons/buttons.c
+    ../../platform/drivers/magnetometer/magnetometer.c
 )
 
 target_include_directories(app PRIVATE
@@ -14,4 +15,5 @@ target_include_directories(app PRIVATE
     ../../platform/drivers/pmic
     ../../platform/drivers/led
     ../../platform/drivers/buttons
+    ../../platform/drivers/magnetometer
 )

@@ -6,12 +6,14 @@
 #include "pmic.h"
 #include "led.h"
 #include "buttons.h"
+#include "magnetometer.h"
 
 LOG_MODULE_REGISTER(app_asset_tracker);
 
 static struct k_work_delayable telemetry_work;
 static struct high_g_data motion_data;
 static struct pmic_battery_data batt_data;
+static struct mag_sensor_data mag_data;
 
 static void on_button_event(enum button_id id, enum button_event event)
 {
@@ -30,7 +32,7 @@ static void on_button_event(enum button_id id, enum button_event event)
 
 static void telemetry_work_handler(struct k_work *work)
 {
-    LOG_INF("Sampling High-G impact, PMIC battery, servicing LED & Buttons...");
+    LOG_INF("Sampling Magnetometer, High-G, PMIC battery, servicing LED & Buttons...");
 
     /* Update RGB LED pattern animation step */
     led_update();
@@ -38,8 +40,23 @@ static void telemetry_work_handler(struct k_work *work)
     /* Service button debouncing & events */
     buttons_update();
 
+    /* Read 3-Axis Magnetometer metrics */
+    int err = mag_sensor_read(&mag_data);
+    if (err == 0 && mag_data.valid) {
+        LOG_INF("[MAGNETOMETER METRICS] Bx: %.1f | By: %.1f | Bz: %.1f µT | |B|: %.1f µT | Heading: %.1f°",
+                (double)mag_data.mag_x_ut, (double)mag_data.mag_y_ut, (double)mag_data.mag_z_ut,
+                (double)mag_data.magnitude_ut, (double)mag_data.heading_deg);
+
+        if (mag_data.tamper_detected) {
+            LOG_WRN("!!! MAGNETIC PROXIMITY / TAMPER DETECTED !!! |B| = %.1f µT", (double)mag_data.magnitude_ut);
+        }
+    } else {
+        LOG_ERR("Failed to read Magnetometer (err: %d)", err);
+    }
+    mag_sensor_sleep();
+
     /* Read High-G Impact metrics */
-    int err = high_g_read(&motion_data);
+    err = high_g_read(&motion_data);
     if (err == 0 && motion_data.valid) {
         LOG_INF("[HIGH-G METRICS] Mag: %.2f g | Peak: %.2f g | Ax: %.2f | Ay: %.2f | Az: %.2f",
                 (double)motion_data.magnitude, (double)motion_data.peak_g,
@@ -77,9 +94,14 @@ static void telemetry_work_handler(struct k_work *work)
 
 int app_init(void)
 {
-    LOG_INF("Initializing Asset Tracker Profile with Buttons, LED, PMIC & High-G Drivers...");
+    LOG_INF("Initializing Asset Tracker Profile with Magnetometer, Buttons, LED, PMIC & High-G Drivers...");
     
-    int err = buttons_driver_init();
+    int err = mag_sensor_init();
+    if (err < 0) {
+        LOG_ERR("Failed to initialize Magnetometer driver (err: %d)", err);
+    }
+
+    err = buttons_driver_init();
     if (err < 0) {
         LOG_ERR("Failed to initialize Dual Buttons driver (err: %d)", err);
     } else {
