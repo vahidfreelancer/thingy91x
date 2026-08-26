@@ -4,10 +4,12 @@ target_sources(app PRIVATE
     app.c
     ../../platform/drivers/high_g/high_g.c
     ../../platform/drivers/pmic/pmic.c
+    ../../platform/drivers/led/led.c
 )
 
 target_include_directories(app PRIVATE
     .
     ../../platform/drivers/high_g
     ../../platform/drivers/pmic
+    ../../platform/drivers/led
 )

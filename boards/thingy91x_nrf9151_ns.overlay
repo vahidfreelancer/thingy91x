@@ -12,7 +12,6 @@
 / {
 	aliases {
 		/* Add application-specific aliases here */
-		// sensor-imu = &imu;
 	};
 };
 

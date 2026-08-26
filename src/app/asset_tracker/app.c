@@ -4,6 +4,7 @@
 #include "app_config.h"
 #include "high_g.h"
 #include "pmic.h"
+#include "led.h"
 
 LOG_MODULE_REGISTER(app_asset_tracker);
 
@@ -13,7 +14,10 @@ static struct pmic_battery_data batt_data;
 
 static void telemetry_work_handler(struct k_work *work)
 {
-    LOG_INF("Sampling High-G impact & PMIC battery metrics...");
+    LOG_INF("Sampling High-G impact, PMIC battery & service RGB LED...");
+
+    /* Update RGB LED pattern animation step */
+    led_update();
 
     /* Read High-G Impact metrics */
     int err = high_g_read(&motion_data);
@@ -24,9 +28,11 @@ static void telemetry_work_handler(struct k_work *work)
 
         if (motion_data.impact_detected) {
             LOG_WRN("!!! HIGH-G IMPACT SHOCK DETECTED !!! Magnitude = %.2f g", (double)motion_data.magnitude);
-        }
-        if (motion_data.freefall_detected) {
-            LOG_WRN("!!! FREE-FALL DROP CONDITION DETECTED !!! Magnitude = %.2f g", (double)motion_data.magnitude);
+            /* Switch RGB LED to Fast Red Strobe alert */
+            led_set_pattern(LED_PATTERN_BLINK_FAST, 255, 0, 0);
+        } else {
+            /* Normal status: Green breathing pattern */
+            led_set_pattern(LED_PATTERN_BREATHE, 0, 255, 0);
         }
     } else {
         LOG_ERR("Failed to read High-G motion sensor (err: %d)", err);
@@ -54,9 +60,15 @@ static void telemetry_work_handler(struct k_work *work)
 
 int app_init(void)
 {
-    LOG_INF("Initializing Asset Tracker Profile with PMIC & High-G Drivers...");
+    LOG_INF("Initializing Asset Tracker Profile with LED, PMIC & High-G Drivers...");
     
-    int err = high_g_init();
+    int err = led_driver_init();
+    if (err < 0) {
+        LOG_ERR("Failed to initialize RGB LED HAL driver (err: %d)", err);
+    }
+    led_set_pattern(LED_PATTERN_BREATHE, 0, 255, 0);
+
+    err = high_g_init();
     if (err < 0) {
         LOG_ERR("Failed to initialize High-G HAL driver (err: %d)", err);
     }
