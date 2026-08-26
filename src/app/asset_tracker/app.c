@@ -7,6 +7,7 @@
 #include "led.h"
 #include "buttons.h"
 #include "magnetometer.h"
+#include "wifi_scan.h"
 
 LOG_MODULE_REGISTER(app_asset_tracker);
 
@@ -14,6 +15,7 @@ static struct k_work_delayable telemetry_work;
 static struct high_g_data motion_data;
 static struct pmic_battery_data batt_data;
 static struct mag_sensor_data mag_data;
+static struct wifi_scan_data wifi_data;
 
 static void on_button_event(enum button_id id, enum button_event event)
 {
@@ -32,7 +34,7 @@ static void on_button_event(enum button_id id, enum button_event event)
 
 static void telemetry_work_handler(struct k_work *work)
 {
-    LOG_INF("Sampling Magnetometer, High-G, PMIC battery, servicing LED & Buttons...");
+    LOG_INF("Sampling Wi-Fi nRF7002, Magnetometer, High-G, PMIC battery, servicing LED & Buttons...");
 
     /* Update RGB LED pattern animation step */
     led_update();
@@ -40,8 +42,22 @@ static void telemetry_work_handler(struct k_work *work)
     /* Service button debouncing & events */
     buttons_update();
 
+    /* Trigger passive 2.4/5 GHz Wi-Fi Location scan */
+    wifi_scan_trigger();
+    int err = wifi_scan_get_results(&wifi_data);
+    if (err == 0 && wifi_data.valid) {
+        LOG_INF("[WIFI LOCATION METRICS] Scanned APs: %u | AP1: '%s' (%02X:%02X:%02X:%02X:%02X:%02X, %d dBm, Ch %u)",
+                wifi_data.ap_count, wifi_data.results[0].ssid,
+                wifi_data.results[0].bssid[0], wifi_data.results[0].bssid[1], wifi_data.results[0].bssid[2],
+                wifi_data.results[0].bssid[3], wifi_data.results[0].bssid[4], wifi_data.results[0].bssid[5],
+                wifi_data.results[0].rssi_dbm, wifi_data.results[0].channel);
+    }
+    /* Demonstrate optional Wi-Fi Station (STA) connection */
+    wifi_connect("Office_5G_HighSpeed", "wpa3_passphrase");
+    wifi_scan_sleep();
+
     /* Read 3-Axis Magnetometer metrics */
-    int err = mag_sensor_read(&mag_data);
+    err = mag_sensor_read(&mag_data);
     if (err == 0 && mag_data.valid) {
         LOG_INF("[MAGNETOMETER METRICS] Bx: %.1f | By: %.1f | Bz: %.1f µT | |B|: %.1f µT | Heading: %.1f°",
                 (double)mag_data.mag_x_ut, (double)mag_data.mag_y_ut, (double)mag_data.mag_z_ut,
@@ -94,9 +110,14 @@ static void telemetry_work_handler(struct k_work *work)
 
 int app_init(void)
 {
-    LOG_INF("Initializing Asset Tracker Profile with Magnetometer, Buttons, LED, PMIC & High-G Drivers...");
+    LOG_INF("Initializing Asset Tracker Profile with nRF7002 Wi-Fi, Magnetometer, Buttons, LED, PMIC & High-G Drivers...");
     
-    int err = mag_sensor_init();
+    int err = wifi_scan_init();
+    if (err < 0) {
+        LOG_ERR("Failed to initialize nRF7002 Wi-Fi Location Scanner driver (err: %d)", err);
+    }
+
+    err = mag_sensor_init();
     if (err < 0) {
         LOG_ERR("Failed to initialize Magnetometer driver (err: %d)", err);
     }

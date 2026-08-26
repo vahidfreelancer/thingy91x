@@ -7,6 +7,7 @@ target_sources(app PRIVATE
     ../../platform/drivers/led/led.c
     ../../platform/drivers/buttons/buttons.c
     ../../platform/drivers/magnetometer/magnetometer.c
+    ../../platform/drivers/wifi_scan/wifi_scan.c
 )
 
 target_include_directories(app PRIVATE
@@ -16,4 +17,5 @@ target_include_directories(app PRIVATE
     ../../platform/drivers/led
     ../../platform/drivers/buttons
     ../../platform/drivers/magnetometer
+    ../../platform/drivers/wifi_scan
 )
