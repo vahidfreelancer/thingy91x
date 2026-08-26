@@ -9,6 +9,7 @@
 #include "magnetometer.h"
 #include "wifi_scan.h"
 #include "cellular.h"
+#include "ekf_fusion.h"
 
 LOG_MODULE_REGISTER(app_asset_tracker);
 
@@ -20,6 +21,7 @@ static struct wifi_scan_data wifi_data;
 static struct cellular_signal_info cell_info;
 static struct cellular_network_metadata cell_meta;
 static struct cellular_neighbor_scan cell_neighbors;
+static struct ekf_state ekf_filter;
 
 static void on_button_event(enum button_id id, enum button_event event)
 {
@@ -38,7 +40,7 @@ static void on_button_event(enum button_id id, enum button_event event)
 
 static void telemetry_work_handler(struct k_work *work)
 {
-    LOG_INF("Sampling nRF9151 Cellular, nRF7002 Wi-Fi, Magnetometer, High-G, PMIC battery, servicing LED & Buttons...");
+    LOG_INF("Sampling nRF9151 Cellular, nRF7002 Wi-Fi, Magnetometer, High-G, EKF Fusion, PMIC battery, servicing LED & Buttons...");
 
     /* Update RGB LED pattern animation step */
     led_update();
@@ -103,6 +105,16 @@ static void telemetry_work_handler(struct k_work *work)
     }
     high_g_sleep();
 
+    /* Perform Extended Kalman Filter (EKF) 9-DOF Sensor Fusion Step */
+    ekf_fusion_predict(&ekf_filter, 0.01f, -0.02f, 0.05f, 0.1f);
+    ekf_fusion_update(&ekf_filter, motion_data.accel_x, motion_data.accel_y, motion_data.accel_z,
+                      mag_data.mag_x_ut, mag_data.mag_y_ut, mag_data.mag_z_ut);
+    
+    float r = 0, p = 0, y = 0;
+    ekf_fusion_get_orientation(&ekf_filter, &r, &p, &y);
+    LOG_INF("[EKF 9-DOF AHRS FUSED ORIENTATION] Roll: %.2f° | Pitch: %.2f° | Yaw/Heading: %.2f°",
+            (double)r, (double)p, (double)y);
+
     /* Read PMIC & Battery metrics */
     err = pmic_read(&batt_data);
     if (err == 0 && batt_data.valid) {
@@ -124,9 +136,14 @@ static void telemetry_work_handler(struct k_work *work)
 
 int app_init(void)
 {
-    LOG_INF("Initializing Asset Tracker Profile with Cellular, Wi-Fi, Magnetometer, Buttons, LED, PMIC & High-G Drivers...");
+    LOG_INF("Initializing Asset Tracker Profile with EKF Sensor Fusion, Cellular, Wi-Fi, Magnetometer, Buttons, LED, PMIC & High-G Drivers...");
     
-    int err = cellular_modem_init();
+    int err = ekf_fusion_init(&ekf_filter);
+    if (err < 0) {
+        LOG_ERR("Failed to initialize EKF Sensor Fusion service (err: %d)", err);
+    }
+
+    err = cellular_modem_init();
     if (err < 0) {
         LOG_ERR("Failed to initialize nRF9151 Cellular Modem driver (err: %d)", err);
     } else {

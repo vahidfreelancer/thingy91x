@@ -9,6 +9,7 @@ target_sources(app PRIVATE
     ../../platform/drivers/magnetometer/magnetometer.c
     ../../platform/drivers/wifi_scan/wifi_scan.c
     ../../platform/drivers/cellular/cellular.c
+    ../../services/fusion/ekf_fusion.c
 )
 
 target_include_directories(app PRIVATE
@@ -20,4 +21,5 @@ target_include_directories(app PRIVATE
     ../../platform/drivers/magnetometer
     ../../platform/drivers/wifi_scan
     ../../platform/drivers/cellular
+    ../../services/fusion
 )
