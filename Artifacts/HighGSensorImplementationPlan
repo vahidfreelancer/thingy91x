@@ -1,0 +1,47 @@
+# Implementation Plan: High-G Impact & Motion Driver
+
+Implement a modular High-G Impact Accelerometer Driver (`src/platform/drivers/high_g/`) for the Nordic Thingy:91 X platform to detect shock events, high-G impacts, free-fall drops, and peak acceleration metrics.
+
+## Proposed Changes
+
+### Hardware Abstraction Layer (HAL) - Drivers & Math
+
+#### [NEW] [high_g.h](file:///d:/Projects/thingy91x/src/platform/drivers/high_g/high_g.h)
+- Declare `struct high_g_data` containing `accel_x`, `accel_y`, `accel_z` (in g), `magnitude` $\|a\| = \sqrt{a_x^2 + a_y^2 + a_z^2}$, `peak_g`, `impact_detected`, `freefall_detected`, and `valid` flag.
+- Expose driver interface functions:
+  - `int high_g_init(void)`: Initialize Devicetree sensor node (`adi,adxl372`, `bosch,bma400`) or register software fallback simulation.
+  - `int high_g_read(struct high_g_data *data)`: Sample accelerometer channels, compute vector magnitude $\|a\|$, evaluate shock & free-fall thresholds, and update peak hold.
+  - `int high_g_set_threshold(float threshold_g)`: Set shock trigger threshold in g.
+  - `int high_g_reset_peak(void)`: Clear stored peak acceleration value.
+  - `int high_g_sleep(void)`: Put sensor into ultra-low-power suspended state (`CONFIG_PM_DEVICE`).
+
+#### [NEW] [high_g.c](file:///d:/Projects/thingy91x/src/platform/drivers/high_g/high_g.c)
+- Implement driver logic using Zephyr `sensor.h` APIs (`SENSOR_CHAN_ACCEL_XYZ`), Devicetree macros (`DT_HAS_COMPAT_STATUS_OKAY`), vector math routines, threshold checks, logging via `LOG_MODULE_REGISTER(high_g_driver)`, POSIX error return codes, and software simulation fallback for off-target validation.
+
+---
+
+### Devicetree & Board Overlay
+
+#### [MODIFY] [thingy91x_nrf9151_ns.overlay](file:///d:/Projects/thingy91x/boards/thingy91x_nrf9151_ns.overlay)
+- Add High-G accelerometer node (`adxl372`) under SPI/I2C bus overlay.
+
+---
+
+### Application Integration & Profile Support
+
+#### [MODIFY] [CMakeLists.txt](file:///d:/Projects/thingy91x/src/app/asset_tracker/CMakeLists.txt)
+- Include `../../platform/drivers/high_g/high_g.c` and driver include paths in `asset_tracker` and `travel_history` targets.
+
+#### [MODIFY] [app.c](file:///d:/Projects/thingy91x/src/app/asset_tracker/app.c)
+- Integrate `high_g_init()`, `high_g_read()`, and impact trigger logging in `asset_tracker/app.c`.
+
+---
+
+## Verification Plan
+
+### Automated / Build Verification
+- Compile firmware using nRF Connect SDK toolchain (`west build -b thingy91x/nrf9151/ns`) with `CONFIG_BOOTLOADER_MCUBOOT=y`.
+
+### Hardware Flashing & Live Testing
+- Flash signed application package (`dfu_application.zip`) to connected **Thingy:91 X** (`THINGY91X_F40679066AD`) via MCUboot DFU.
+- Read live serial logs from COM ports to verify driver boot, vector math calculations ($\|a\|$), peak tracking, and impact detection alerts.

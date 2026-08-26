@@ -1,0 +1,225 @@
+This folder contains precompiled binaries and DFU images for the Thingy:53 compatible samples and applications in the nRF Connect SDK. 
+
+The sample folder may contain up-to three files:
+
++-----------------------------------+-------------------------------------------------+---------------------------------------------------------------------+
+|              File                 |                   Description                   |                     How to program to Thingy:53                     |
++-----------------------------------+-------------------------------------------------+---------------------------------------------------------------------+
+| merged_CPUAPP.hex                 | Application core binary                         | Using an external debug probe and nRF Connect Programmer            |
+| merged_CPUNET.hex                 | Network core binary                             | Using an external debug probe and nRF Connect Programmer            |
+| dfu_application_<sample_name>.zip | MCUboot compatible update images for both cores | Using nRF Programmer for Android and iOS, or nRF Connect Programmer |
++-----------------------------------+-------------------------------------------------+---------------------------------------------------------------------+
+
+Note: Some samples have both a release configuration and debug configuration, denoted by Release and Debug in the file names. 
+
+Folder structure: 
+
+|   CONTENTS.txt
+|   test.txt
+|   
++---Bluetooth_Mesh
+|   +---Mesh_light
+|   |   |   dfu_application_mesh_light_2.7.0_thingy53_nrf5340.zip
+|   |   |   
+|   |   +---hci_ipc
+|   |   |       merged_CPUNET.hex
+|   |   |       
+|   |   \---zephyr
+|   |           merged_CPUAPP.hex
+|   |           
+|   +---Mesh_light_ctrl
+|   |   |   dfu_application_mesh_light_ctrl_2.7.0_thingy53_nrf5340.zip
+|   |   |   
+|   |   +---hci_ipc
+|   |   |       merged_CPUNET.hex
+|   |   |       
+|   |   \---zephyr
+|   |           merged_CPUAPP.hex
+|   |           
+|   +---Mesh_light_dimmer
+|   |   |   dfu_application_mesh_light_dimmer_2.7.0_thingy53_nrf5340.zip
+|   |   |   
+|   |   +---hci_ipc
+|   |   |       merged_CPUNET.hex
+|   |   |       
+|   |   \---zephyr
+|   |           merged_CPUAPP.hex
+|   |           
+|   +---Mesh_light_switch
+|   |   |   dfu_application_mesh_light_switch_2.7.0_thingy53_nrf5340.zip
+|   |   |   
+|   |   +---hci_ipc
+|   |   |       merged_CPUNET.hex
+|   |   |       
+|   |   \---zephyr
+|   |           merged_CPUAPP.hex
+|   |           
+|   \---Mesh_sensor_server
+|       |   dfu_application_mesh_sensor_server_2.7.0_thingy53_nrf5340.zip
+|       |   
+|       +---hci_ipc
+|       |       merged_CPUNET.hex
+|       |       
+|       \---zephyr
+|               merged_CPUAPP.hex
+|               
++---Edge_Impulse
+|   |   dfu_application_edge_impulse_thingy53_nrf5340.zip
+|   |   
+|   +---hci_rpmsg
+|   |       merged_CPUNET.hex
+|   |       
+|   \---zephyr
+|           merged_CPUAPP.hex
+|           
++---Edge_Impulse_nRF7002_EB
+|   |   dfu_application_edge_impulse_nrf7002eb_thingy53_nrf5340.zip
+|   |   
+|   +---hci_rpmsg
+|   |       merged_CPUNET.hex
+|   |       
+|   \---zephyr
+|           merged_CPUAPP.hex
+|           
++---Machine_Learning
+|   +---machine_learning.zdebug
+|   |   |   machine_learning_2.7.0_thingy53_nrf5340_zdebug.zip
+|   |   |   
+|   |   +---hci_ipc
+|   |   |       merged_CPUNET.hex
+|   |   |       
+|   |   \---zephyr
+|   |           merged_CPUAPP.hex
+|   |           
+|   +---machine_learning.zdebug_rtt
+|   |   |   machine_learning_2.7.0_thingy53_nrf5340_zdebug_rtt.zip
+|   |   |   
+|   |   +---hci_ipc
+|   |   |       merged_CPUNET.hex
+|   |   |       
+|   |   \---zephyr
+|   |           merged_CPUAPP.hex
+|   |           
+|   \---machine_learning.zrelease
+|       |   machine_learning_2.7.0_thingy53_nrf5340_zrelease.zip
+|       |   
+|       +---hci_ipc
+|       |       merged_CPUNET.hex
+|       |       
+|       \---zephyr
+|               merged_CPUAPP.hex
+|               
++---Matter_Weather_Station
+|   |   dfu_application_matter_weather_station_2.7.0_thingy53.zip
+|   |   
+|   +---multiprotocol_rpmsg
+|   |       merged_CPUNET.hex
+|   |       
+|   \---zephyr
+|           merged_CPUAPP.hex
+|           
++---Matter_Weather_Station_nRF7002_EB
+|   |   dfu_application_matter_weather_station_nrf7002eb_2.7.0_thingy53.zip
+|   |   
+|   +---hci_ipc
+|   |       merged_CPUNET.hex
+|   |       
+|   \---zephyr
+|           merged_CPUAPP.hex
+|           
++---Peripheral_LBS
+|   |   dfu_application_peripheral_lbs_2.7.0_thingy53_nrf5340.zip
+|   |   
+|   +---hci_ipc
+|   |       merged_CPUNET.hex
+|   |       
+|   \---zephyr
+|           merged_CPUAPP.hex
+|           
++---Peripheral_Status
+|   |   dfu_application_peripheral_status_2.7.0_thingy53_nrf5340.zip
+|   |   
+|   +---hci_ipc
+|   |       merged_CPUNET.hex
+|   |       
+|   \---zephyr
+|           merged_CPUAPP.hex
+|           
++---Peripheral_UART
+|   |   dfu_application_peripheral_uart_2.7.0_thingy53_nrf5340.zip
+|   |   
+|   +---hci_ipc
+|   |       merged_CPUNET.hex
+|   |       
+|   \---zephyr
+|           merged_CPUAPP.hex
+|           
++---Sensor_BME68x
+|   |   dfu_application_dfu_application_sensor_bme68x_2.7.0_thingy53_nrf5340.zip
+|   |   
+|   +---empty_net_core
+|   |       merged_CPUNET.hex
+|   |       
+|   \---zephyr
+|           merged_CPUAPP.hex
+|           
++---Wi-Fi
+|   +---Bluetooth_LE_Coexistence
+|   |   |   dfu_application_wifi_sr_coex_2.7.0_thingy53_nrf5340.zip
+|   |   |   
+|   |   +---hci_ipc
+|   |   |       merged_CPUNET.hex
+|   |   |       
+|   |   \---zephyr
+|   |           merged_CPUAPP.hex
+|   |           
+|   +---Provisioning_Service
+|   |   |   dfu_application_wifi_provisioning_2.7.0_thingy53_nrf5340.zip
+|   |   |   
+|   |   +---hci_ipc
+|   |   |       merged_CPUNET.hex
+|   |   |       
+|   |   \---zephyr
+|   |           merged_CPUAPP.hex
+|   |           
+|   +---Scan
+|   |   |   dfu_application_wifi_scan_2.7.0_thingy53_nrf5340.zip
+|   |   |   
+|   |   +---empty_net_core
+|   |   |       merged_CPUNET.hex
+|   |   |       
+|   |   \---zephyr
+|   |           merged_CPUAPP.hex
+|   |           
+|   +---Shell
+|   |   |   dfu_application_wifi_shell_2.7.0_thingy53_nrf5340.zip
+|   |   |   
+|   |   +---empty_net_core
+|   |   |       merged_CPUNET.hex
+|   |   |       
+|   |   \---zephyr
+|   |           merged_CPUAPP.hex
+|   |           
+|   +---Station
+|   |   |   dfu_application_wifi_station_2.7.0_thingy53_nrf5340.zip
+|   |   |   
+|   |   +---empty_app_core
+|   |   |       merged_CPUNET.hex
+|   |   |       
+|   |   \---zephyr
+|   |           merged_CPUAPP.hex
+|   |           
+|   \---Thread_Coexistence
+|           dfu_application_wifi_thread_coex_2.7.0_thingy53_nrf5340.zip
+|           merged_CPUAPP.hex
+|           merged_CPUNET.hex
+|           
+\---Zigbee_Weather_Station
+    |   dfu_application_zigbee_weather_station_2.7.0_thingy53.zip
+    |   
+    +---802154_rpmsg
+    |       merged_CPUNET.hex
+    |       
+    \---zephyr
+            merged_CPUAPP.hex
+            

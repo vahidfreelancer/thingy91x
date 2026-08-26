@@ -16,11 +16,27 @@
 	};
 };
 
-/* Example: Configuring the I2C peripheral for environmental sensors */
 &i2c2 {
 	status = "okay";
-	/* Custom clock frequency or sensor parameters can be overridden here */
 	clock-frequency = <I2C_BITRATE_FAST>;
+
+	bme680: bme680@76 {
+		compatible = "bosch,bme680";
+		reg = <0x76>;
+		label = "BME688_ENVIRONMENTAL";
+	};
+
+	adxl372: adxl372@53 {
+		compatible = "adi,adxl372";
+		reg = <0x53>;
+		label = "ADXL372_HIGH_G";
+	};
+
+	npm1300: npm1300@6b {
+		compatible = "nordic,npm1300";
+		reg = <0x6b>;
+		label = "NPM1300_PMIC";
+	};
 };
 
 /* Example: Enabling low power states on UART console */

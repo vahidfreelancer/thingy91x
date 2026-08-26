@@ -1,0 +1,41 @@
+{
+    "format-version": 0,
+    "time": 1702563846,
+    "files": [
+        {
+            "type": "application",
+            "board": "thingy53_nrf5340_cpuapp",
+            "soc": "nRF5340_CPUAPP_QKAA",
+            "load_address": 66048,
+            "image_index": "0",
+            "slot_index_primary": "1",
+            "slot_index_secondary": "2",
+            "version_MCUBOOT": "2.4.0+0",
+            "size": 340860,
+            "file": "app_update.bin",
+            "modtime": 1702563846
+        },
+        {
+            "type": "application",
+            "board": "thingy53_nrf5340_cpunet",
+            "soc": "nRF5340_CPUNET_QKAA",
+            "image_index": "1",
+            "slot_index_primary": "3",
+            "slot_index_secondary": "4",
+            "load_address": 16812032,
+            "version": "1",
+            "size": 190152,
+            "file": "net_core_app_update.bin",
+            "modtime": 1702563836
+        }
+    ],
+    "name": "firmware-nordic-thingy53",
+    "firmware": {
+        "zephyr": {
+            "revision": "76a210f587c0121e97a8de7a7505f2d5d46b5011"
+        },
+        "nrf": {
+            "revision": "0677b0991e4c3ea58efd14e9e33b6c29a1919113"
+        }
+    }
+}

@@ -1,0 +1,41 @@
+{
+    "format-version": 1,
+    "time": 1720033057,
+    "files": [
+        {
+            "type": "application",
+            "board": "thingy53",
+            "soc": "nrf5340",
+            "load_address": 66048,
+            "image_index": "0",
+            "slot_index_primary": "1",
+            "slot_index_secondary": "2",
+            "version_MCUBOOT": "2.6.99+0",
+            "size": 832772,
+            "file": "matter_weather_station.bin",
+            "modtime": 1720033026
+        },
+        {
+            "type": "application",
+            "board": "thingy53/nrf5340/cpunet",
+            "soc": "nrf5340",
+            "image_index": "1",
+            "slot_index_primary": "3",
+            "slot_index_secondary": "4",
+            "load_address": 16812032,
+            "version": "1",
+            "size": 164008,
+            "file": "hci_ipc.bin",
+            "modtime": 1720033056
+        }
+    ],
+    "name": "matter_weather_station",
+    "firmware": {
+        "zephyr": {
+            "revision": "100befc70c74f7ec83dd8ac3171ee18eeddb4dbd"
+        },
+        "nrf": {
+            "revision": "20471118a9a0ee447762814c922016553e7efe10"
+        }
+    }
+}
