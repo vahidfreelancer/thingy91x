@@ -16,10 +16,12 @@ static uint32_t anim_step = 0;
 int led_driver_init(void)
 {
     /* Query Devicetree for LED devices */
-#if DT_HAS_COMPAT_STATUS_OKAY(gpio_leds)
+#if defined(CONFIG_LED_GPIO) && DT_HAS_COMPAT_STATUS_OKAY(gpio_leds)
     led_dev = DEVICE_DT_GET_ANY(gpio_leds);
-#elif DT_HAS_COMPAT_STATUS_OKAY(pwm_leds)
+#elif defined(CONFIG_LED_PWM) && DT_HAS_COMPAT_STATUS_OKAY(pwm_leds)
     led_dev = DEVICE_DT_GET_ANY(pwm_leds);
+#else
+    led_dev = NULL;
 #endif
 
     if (led_dev && device_is_ready(led_dev)) {

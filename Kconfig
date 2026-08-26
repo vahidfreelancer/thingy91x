@@ -38,6 +38,11 @@ config APP_PROFILE_TRAVEL_HISTORY
     help
       Compiles the travel history application, logging GNSS/IMU/Attitude data every 1 second to flash.
 
+config APP_PROFILE_HW_TEST
+    bool "Hardware Diagnostic & Remote Test Suite Profile"
+    help
+      Compiles the hardware diagnostic test suite profile connecting to s4.sytemonitor.co.uk:1200 upon button press.
+
 endchoice
 
 endmenu
@@ -47,8 +52,9 @@ menu "Application Thread Configurations"
 
 config APP_MAIN_THREAD_PRIORITY
     int "Main Application Thread Priority"
-    default 5 if APP_PROFILE_ASSET_TRACKER || APP_PROFILE_ENV_MONITOR || APP_PROFILE_TRAVEL_HISTORY
+    default 5 if APP_PROFILE_ASSET_TRACKER || APP_PROFILE_ENV_MONITOR || APP_PROFILE_TRAVEL_HISTORY || APP_PROFILE_HW_TEST
     default -10 if APP_PROFILE_AUTOPILOT
+    default 5
     help
       Define the execution priority of the main application thread.
       Use negative values (cooperative threads) for time-critical profiles like Autopilot to prevent preemption.

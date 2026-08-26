@@ -22,8 +22,10 @@ static uint8_t click_count[BUTTON_COUNT] = {0, 0};
 int buttons_driver_init(void)
 {
     /* Query Devicetree for button keys node */
-#if DT_HAS_COMPAT_STATUS_OKAY(gpio_keys)
+#if defined(CONFIG_INPUT_GPIO_KEYS) && DT_HAS_COMPAT_STATUS_OKAY(gpio_keys)
     btn_dev = DEVICE_DT_GET_ANY(gpio_keys);
+#else
+    btn_dev = NULL;
 #endif
 
     if (btn_dev && device_is_ready(btn_dev)) {
