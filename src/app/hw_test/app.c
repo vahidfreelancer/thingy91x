@@ -32,6 +32,40 @@ static struct cellular_network_metadata cell_meta;
 static struct cellular_neighbor_scan cell_neighbors;
 static struct ekf_state ekf_filter;
 
+enum hw_test_led_state {
+    HW_STATE_IDLE_DISCONNECTED = 0, /**< Green Breathing: Idle system power OK, waiting for button press */
+    HW_STATE_CONNECTING_TCP,        /**< Rapid Blue Blinking: Initiating network attach & TCP socket connect */
+    HW_STATE_SOCKET_CONNECTED,       /**< Solid Cyan: TCP socket connected to s4.sytemonitor.co.uk:1200 */
+    HW_STATE_PROCESSING_COMMAND,    /**< Rapid Magenta Flashes: Receiving JSON command & transmitting response */
+    HW_STATE_ERROR_DISCONNECTED     /**< Slow Red Pulse: Error / Socket disconnection alert */
+};
+
+static void set_hw_test_led_state(enum hw_test_led_state state)
+{
+    switch (state) {
+        case HW_STATE_IDLE_DISCONNECTED:
+            LOG_INF("[LED STATE] IDLE_DISCONNECTED -> Green Breathing (R:0, G:255, B:0)");
+            led_set_pattern(LED_PATTERN_BREATHE, 0, 255, 0);
+            break;
+        case HW_STATE_CONNECTING_TCP:
+            LOG_INF("[LED STATE] CONNECTING_TCP -> Fast Blue Blinking (R:0, G:128, B:255)");
+            led_set_pattern(LED_PATTERN_BLINK_FAST, 0, 128, 255);
+            break;
+        case HW_STATE_SOCKET_CONNECTED:
+            LOG_INF("[LED STATE] SOCKET_CONNECTED -> Solid Cyan Glow (R:0, G:255, B:255)");
+            led_set_pattern(LED_PATTERN_SOLID, 0, 255, 255);
+            break;
+        case HW_STATE_PROCESSING_COMMAND:
+            LOG_INF("[LED STATE] PROCESSING_COMMAND -> Fast Magenta Flashes (R:255, G:0, B:255)");
+            led_set_pattern(LED_PATTERN_BLINK_FAST, 255, 0, 255);
+            break;
+        case HW_STATE_ERROR_DISCONNECTED:
+            LOG_INF("[LED STATE] ERROR_DISCONNECTED -> Slow Red Pulse (R:255, G:0, B:0)");
+            led_set_pattern(LED_PATTERN_BLINK_SLOW, 255, 0, 0);
+            break;
+    }
+}
+
 /**
  * @brief Handle incoming TCP JSON commands from s4.sytemonitor.co.uk:1200
  * and serialize JSON responses containing raw values, calculated values, and measurement units.
@@ -39,6 +73,9 @@ static struct ekf_state ekf_filter;
 static void process_json_command(const char *cmd_json, char *resp_buf, size_t max_len)
 {
     if (!cmd_json || !resp_buf) return;
+
+    /* Flash Magenta LED to indicate active JSON command processing */
+    set_hw_test_led_state(HW_STATE_PROCESSING_COMMAND);
 
     LOG_INF("[TCP RECV s4.sytemonitor.co.uk:1200] Raw Command: %s", cmd_json);
 
@@ -175,7 +212,6 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             cell_neighbors.station_count, cell_neighbors.stations[0].cell_id, cell_neighbors.stations[0].rsrp_dbm);
     }
     else if (strstr(cmd_json, "SET_LED_PATTERN")) {
-        led_set_pattern(LED_PATTERN_BLINK_FAST, 0, 0, 255);
         snprintf(resp_buf, max_len,
             "{\"status\":\"SUCCESS\",\"cmd\":\"SET_LED_PATTERN\",\"pattern\":\"BLINK_FAST\",\"rgb\":[0,0,255]}");
     }
@@ -198,23 +234,30 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
 
     LOG_INF("[TCP SEND s4.sytemonitor.co.uk:1200] Response Serialized (%u bytes): %s",
             (unsigned int)strlen(resp_buf), resp_buf);
+
+    /* Return to Solid Cyan LED to reflect established TCP socket connection */
+    set_hw_test_led_state(HW_STATE_SOCKET_CONNECTED);
 }
 
 static void on_hw_test_button(enum button_id id, enum button_event event)
 {
     const char *btn_name = (id == BUTTON_ID_1) ? "BUTTON1" : "BUTTON2";
     LOG_INF("=================================================");
-    LOG_INF("[USER ACTION] %s Pressed! Connecting to server 's4.sytemonitor.co.uk' on port 1200 over TCP socket...", btn_name);
+    LOG_INF("[USER ACTION] %s Pressed! Initiating TCP connection to %s:%d...", btn_name, SERVER_HOST, SERVER_PORT);
     LOG_INF("=================================================");
 
+    /* Set LED to Fast Blue Blinking during TCP socket handshake */
+    set_hw_test_led_state(HW_STATE_CONNECTING_TCP);
+
     socket_active = true;
-    /* Trigger cyan flashing pattern to indicate server connection */
-    led_set_pattern(LED_PATTERN_BLINK_SLOW, 0, 255, 255);
+
+    /* Transition to Solid Cyan Glow upon TCP socket activation */
+    set_hw_test_led_state(HW_STATE_SOCKET_CONNECTED);
 }
 
 static void hw_test_work_handler(struct k_work *work)
 {
-    /* Service LED pattern and button debouncing */
+    /* Service LED animation step and button debouncing */
     led_update();
     buttons_update();
 
@@ -266,8 +309,8 @@ int app_init(void)
     cellular_modem_connect(CELLULAR_MODE_LTE_M);
     ekf_fusion_init(&ekf_filter);
 
-    /* Initial green breathing pattern */
-    led_set_pattern(LED_PATTERN_BREATHE, 0, 255, 0);
+    /* Initial Green Breathing pattern for IDLE_DISCONNECTED state */
+    set_hw_test_led_state(HW_STATE_IDLE_DISCONNECTED);
 
     k_work_init_delayable(&hw_test_work, hw_test_work_handler);
     return 0;
