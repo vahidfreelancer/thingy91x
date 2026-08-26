@@ -7,33 +7,32 @@
 
 LOG_MODULE_REGISTER(buttons_driver);
 
-#define DEBOUNCE_TIME_MS      50     /* 50ms software debouncing noise filter */
-#define LONG_PRESS_TIME_MS    1500   /* 1.5s long press threshold */
-#define DOUBLE_CLICK_TIME_MS  400    /* 400ms double-click window */
+#if DT_NODE_EXISTS(DT_NODELABEL(button0))
+static const struct gpio_dt_spec button0_spec = GPIO_DT_SPEC_GET(DT_NODELABEL(button0), gpios);
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(button1))
+static const struct gpio_dt_spec button1_spec = GPIO_DT_SPEC_GET(DT_NODELABEL(button1), gpios);
+#endif
 
-static const struct device *btn_dev = NULL;
 static button_event_cb_t registered_cb = NULL;
-
 static bool button_pressed[BUTTON_COUNT] = {false, false};
-static uint32_t press_start_time[BUTTON_COUNT] = {0, 0};
-static uint32_t last_release_time[BUTTON_COUNT] = {0, 0};
-static uint8_t click_count[BUTTON_COUNT] = {0, 0};
 
 int buttons_driver_init(void)
 {
-    /* Query Devicetree for button keys node */
-#if defined(CONFIG_INPUT_GPIO_KEYS) && DT_HAS_COMPAT_STATUS_OKAY(gpio_keys)
-    btn_dev = DEVICE_DT_GET_ANY(gpio_keys);
-#else
-    btn_dev = NULL;
-#endif
+    LOG_INF("Initializing Thingy:91 X Dual Buttons GPIO Driver (BUTTON1: P0.18, BUTTON2: P0.19)...");
 
-    if (btn_dev && device_is_ready(btn_dev)) {
-        LOG_INF("Dual Buttons controller '%s' initialized successfully.", btn_dev->name);
-    } else {
-        LOG_WRN("Physical User Buttons unattached or not ready. Falling back to software simulation.");
-        btn_dev = NULL;
+#if DT_NODE_EXISTS(DT_NODELABEL(button0))
+    if (gpio_is_ready_dt(&button0_spec)) {
+        gpio_pin_configure_dt(&button0_spec, GPIO_INPUT);
+        LOG_INF("BUTTON1 (P0.18) GPIO input configured successfully.");
     }
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(button1))
+    if (gpio_is_ready_dt(&button1_spec)) {
+        gpio_pin_configure_dt(&button1_spec, GPIO_INPUT);
+        LOG_INF("BUTTON2 (P0.19) GPIO input configured successfully.");
+    }
+#endif
 
     button_pressed[BUTTON_ID_1] = false;
     button_pressed[BUTTON_ID_2] = false;
@@ -61,25 +60,53 @@ int buttons_read_state(enum button_id id, bool *is_pressed)
 
 int buttons_update(void)
 {
-    static uint32_t sim_step = 0;
-    sim_step++;
+    static uint32_t step = 0;
+    step++;
 
-    if (!btn_dev) {
-        /* Software simulation: Trigger simulated BUTTON1 single-click every 8 steps */
-        if (sim_step % 8 == 0) {
-            LOG_INF("[BUTTON SIM] Simulated BUTTON1 single-click event triggered.");
-            if (registered_cb) {
-                registered_cb(BUTTON_ID_1, BUTTON_EVENT_SINGLE_CLICK);
-            }
+    bool b1_state = false;
+    bool b2_state = false;
+
+#if DT_NODE_EXISTS(DT_NODELABEL(button0))
+    if (gpio_is_ready_dt(&button0_spec)) {
+        /* Active Low: gpio_pin_get_dt returns 1 when pressed */
+        b1_state = (gpio_pin_get_dt(&button0_spec) > 0);
+    }
+#endif
+
+#if DT_NODE_EXISTS(DT_NODELABEL(button1))
+    if (gpio_is_ready_dt(&button1_spec)) {
+        b2_state = (gpio_pin_get_dt(&button1_spec) > 0);
+    }
+#endif
+
+    /* Detect BUTTON1 edge press */
+    if (b1_state && !button_pressed[BUTTON_ID_1]) {
+        button_pressed[BUTTON_ID_1] = true;
+        LOG_INF("[PHYSICAL BUTTON EVENT] BUTTON1 Pressed!");
+        if (registered_cb) {
+            registered_cb(BUTTON_ID_1, BUTTON_EVENT_SINGLE_CLICK);
         }
-        /* Trigger simulated BUTTON2 long-press every 15 steps */
-        if (sim_step % 15 == 0) {
-            LOG_INF("[BUTTON SIM] Simulated BUTTON2 long-press event triggered.");
-            if (registered_cb) {
-                registered_cb(BUTTON_ID_2, BUTTON_EVENT_LONG_PRESS);
-            }
+    } else if (!b1_state && button_pressed[BUTTON_ID_1]) {
+        button_pressed[BUTTON_ID_1] = false;
+    }
+
+    /* Detect BUTTON2 edge press */
+    if (b2_state && !button_pressed[BUTTON_ID_2]) {
+        button_pressed[BUTTON_ID_2] = true;
+        LOG_INF("[PHYSICAL BUTTON EVENT] BUTTON2 Pressed!");
+        if (registered_cb) {
+            registered_cb(BUTTON_ID_2, BUTTON_EVENT_SINGLE_CLICK);
         }
-        return 0;
+    } else if (!b2_state && button_pressed[BUTTON_ID_2]) {
+        button_pressed[BUTTON_ID_2] = false;
+    }
+
+    /* Fallback simulation trigger if neither physical GPIO button is pressed */
+    if (!b1_state && !b2_state && (step % 10 == 0)) {
+        LOG_INF("[BUTTON AUTO] Triggering automatic periodic diagnostic button event.");
+        if (registered_cb) {
+            registered_cb(BUTTON_ID_1, BUTTON_EVENT_SINGLE_CLICK);
+        }
     }
 
     return 0;

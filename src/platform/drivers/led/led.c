@@ -8,28 +8,39 @@
 
 LOG_MODULE_REGISTER(led_driver);
 
-static const struct device *led_dev = NULL;
+#if DT_NODE_EXISTS(DT_NODELABEL(red_led))
+static const struct gpio_dt_spec red_led_spec   = GPIO_DT_SPEC_GET(DT_NODELABEL(red_led), gpios);
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(green_led))
+static const struct gpio_dt_spec green_led_spec = GPIO_DT_SPEC_GET(DT_NODELABEL(green_led), gpios);
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(blue_led))
+static const struct gpio_dt_spec blue_led_spec  = GPIO_DT_SPEC_GET(DT_NODELABEL(blue_led), gpios);
+#endif
+
 static struct led_color current_color = {0, 0, 0};
 static enum led_pattern current_pattern = LED_PATTERN_OFF;
 static uint32_t anim_step = 0;
 
 int led_driver_init(void)
 {
-    /* Query Devicetree for LED devices */
-#if defined(CONFIG_LED_GPIO) && DT_HAS_COMPAT_STATUS_OKAY(gpio_leds)
-    led_dev = DEVICE_DT_GET_ANY(gpio_leds);
-#elif defined(CONFIG_LED_PWM) && DT_HAS_COMPAT_STATUS_OKAY(pwm_leds)
-    led_dev = DEVICE_DT_GET_ANY(pwm_leds);
-#else
-    led_dev = NULL;
-#endif
+    LOG_INF("Initializing Thingy:91 X RGB LED GPIO Driver (Red: P0.29, Green: P0.31, Blue: P0.30)...");
 
-    if (led_dev && device_is_ready(led_dev)) {
-        LOG_INF("RGB LED controller '%s' initialized successfully.", led_dev->name);
-    } else {
-        LOG_WRN("Physical RGB LED hardware unattached or not ready. Falling back to software simulation.");
-        led_dev = NULL;
+#if DT_NODE_EXISTS(DT_NODELABEL(red_led))
+    if (gpio_is_ready_dt(&red_led_spec)) {
+        gpio_pin_configure_dt(&red_led_spec, GPIO_OUTPUT_INACTIVE);
     }
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(green_led))
+    if (gpio_is_ready_dt(&green_led_spec)) {
+        gpio_pin_configure_dt(&green_led_spec, GPIO_OUTPUT_INACTIVE);
+    }
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(blue_led))
+    if (gpio_is_ready_dt(&blue_led_spec)) {
+        gpio_pin_configure_dt(&blue_led_spec, GPIO_OUTPUT_INACTIVE);
+    }
+#endif
 
     current_pattern = LED_PATTERN_OFF;
     current_color = (struct led_color){0, 0, 0};
@@ -78,6 +89,15 @@ int led_update(void)
     anim_step++;
 
     if (current_pattern == LED_PATTERN_OFF) {
+#if DT_NODE_EXISTS(DT_NODELABEL(red_led))
+        if (gpio_is_ready_dt(&red_led_spec)) gpio_pin_set_dt(&red_led_spec, 0);
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(green_led))
+        if (gpio_is_ready_dt(&green_led_spec)) gpio_pin_set_dt(&green_led_spec, 0);
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(blue_led))
+        if (gpio_is_ready_dt(&blue_led_spec)) gpio_pin_set_dt(&blue_led_spec, 0);
+#endif
         return 0;
     }
 
@@ -91,7 +111,6 @@ int led_update(void)
             break;
 
         case LED_PATTERN_BLINK_SLOW:
-            /* 1 Hz blink: On 5 steps (500ms), Off 5 steps (500ms) */
             if ((anim_step % 10) < 5) {
                 out_r = current_color.r;
                 out_g = current_color.g;
@@ -100,7 +119,6 @@ int led_update(void)
             break;
 
         case LED_PATTERN_BLINK_FAST:
-            /* 4 Hz fast strobe: On 1 step (100ms), Off 1 step (100ms) */
             if ((anim_step % 2) == 0) {
                 out_r = current_color.r;
                 out_g = current_color.g;
@@ -109,7 +127,6 @@ int led_update(void)
             break;
 
         case LED_PATTERN_BREATHE: {
-            /* Sinusoidal brightness fading: factor = (1 + sin(step * 0.2)) / 2 */
             float factor = (1.0f + (float)sin((double)anim_step * 0.2)) / 2.0f;
             out_r = (uint8_t)((float)current_color.r * factor);
             out_g = (uint8_t)((float)current_color.g * factor);
@@ -118,16 +135,14 @@ int led_update(void)
         }
 
         case LED_PATTERN_BOOT: {
-            /* Rainbow color rotation sequence */
             int phase = (anim_step / 2) % 3;
-            if (phase == 0)      { out_r = 255; out_g = 0;   out_b = 0;   } /* Red */
-            else if (phase == 1) { out_r = 0;   out_g = 255; out_b = 0;   } /* Green */
-            else                 { out_r = 0;   out_g = 0;   out_b = 255; } /* Blue */
+            if (phase == 0)      { out_r = 255; out_g = 0;   out_b = 0;   }
+            else if (phase == 1) { out_r = 0;   out_g = 255; out_b = 0;   }
+            else                 { out_r = 0;   out_g = 0;   out_b = 255; }
             break;
         }
 
         case LED_PATTERN_ERROR:
-            /* Red emergency alert strobe */
             if ((anim_step % 2) == 0) {
                 out_r = 255; out_g = 0; out_b = 0;
             }
@@ -137,10 +152,16 @@ int led_update(void)
             break;
     }
 
-    if (!led_dev) {
-        LOG_DBG("[RGB LED ANIM] Step %u | Active Levels: R=%u, G=%u, B=%u",
-                anim_step, out_r, out_g, out_b);
-    }
+    /* Drive physical GPIO pins on Thingy:91 X */
+#if DT_NODE_EXISTS(DT_NODELABEL(red_led))
+    if (gpio_is_ready_dt(&red_led_spec)) gpio_pin_set_dt(&red_led_spec, out_r > 127 ? 1 : 0);
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(green_led))
+    if (gpio_is_ready_dt(&green_led_spec)) gpio_pin_set_dt(&green_led_spec, out_g > 127 ? 1 : 0);
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(blue_led))
+    if (gpio_is_ready_dt(&blue_led_spec)) gpio_pin_set_dt(&blue_led_spec, out_b > 127 ? 1 : 0);
+#endif
 
     return 0;
 }
@@ -149,6 +170,17 @@ int led_off(void)
 {
     current_pattern = LED_PATTERN_OFF;
     current_color = (struct led_color){0, 0, 0};
-    LOG_INF("[RGB LED] Turned OFF all channels.");
+
+#if DT_NODE_EXISTS(DT_NODELABEL(red_led))
+    if (gpio_is_ready_dt(&red_led_spec)) gpio_pin_set_dt(&red_led_spec, 0);
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(green_led))
+    if (gpio_is_ready_dt(&green_led_spec)) gpio_pin_set_dt(&green_led_spec, 0);
+#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(blue_led))
+    if (gpio_is_ready_dt(&blue_led_spec)) gpio_pin_set_dt(&blue_led_spec, 0);
+#endif
+
+    LOG_INF("[RGB LED] Turned OFF all physical channels.");
     return 0;
 }
