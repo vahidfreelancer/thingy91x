@@ -1,106 +1,49 @@
-Listed directory thingy91x
-Listed directory src
-Listed directory platform
-Listed directory drivers
-Listed directory boards
-Viewed thingy91x_nrf9151_ns.overlay:1-32
-Viewed prj.conf:1-26
-Viewed Kconfig:1-63
-Searched for ".*"
-Listed directory app
-Listed directory gnss
-Listed directory imu
-Listed directory services
-Listed directory Doc
-Viewed ProjectArchitecture.md:1-52
-Viewed GEMINI.md:1-112
-Viewed gnss.h:1-44
-Viewed imu.h:1-29
-Listed directory storage
+# Nordic Thingy:91 X (PCA20065) Hardware Driver Catalog
 
-Based on a review of the repository architecture, [GEMINI.md](file:///d:/Projects/thingy91x/GEMINI.md), and existing drivers in [`src/platform/drivers/`](file:///d:/Projects/thingy91x/src/platform/drivers/), here is the current state of the platform drivers and a comprehensive breakdown of missing drivers that can be implemented for the **Nordic Thingy:91 X** platform.
+Based on the official **Nordic Thingy:91 X Product Brief (Version 1.0)**, here is the complete status of implemented platform drivers and remaining candidate drivers for the **Nordic Thingy:91 X** platform.
 
 ---
 
-### Current Driver Status
+### Implemented Hardware Drivers
 
-Currently, the project only contains initial stub implementations for two hardware drivers under [`src/platform/drivers/`](file:///d:/Projects/thingy91x/src/platform/drivers/):
-1. **GNSS Driver** ([`gnss.h`](file:///d:/Projects/thingy91x/src/platform/drivers/gnss/gnss.h), [`gnss.c`](file:///d:/Projects/thingy91x/src/platform/drivers/gnss/gnss.c)): Interfaces with the nRF9151 integrated GNSS receiver for location fixes (lat/lon, speed, altitude, HDOP).
-2. **IMU Driver** ([`imu.h`](file:///d:/Projects/thingy91x/src/platform/drivers/imu/imu.h), [`imu.c`](file:///d:/Projects/thingy91x/src/platform/drivers/imu/imu.c)): Abstraction for 6-axis motion sensing (accelerometer + gyroscope).
+| Driver | Driver Path | Hardware Target | Status | Implementation Details |
+| :--- | :--- | :--- | :--- | :--- |
+| **Environmental** | [`src/platform/drivers/environment/`](file:///d:/Projects/thingy91x/src/platform/drivers/environment/) | Bosch BME688 / BME680 | **COMPLETED & TESTED** | Temperature, Humidity, Pressure, Gas resistance, and IAQ Index with low-power sleep suspension. |
+| **Motion / Impact** | [`src/platform/drivers/high_g/`](file:///d:/Projects/thingy91x/src/platform/drivers/high_g/) | Low-Power 3-Axis Accel / ADXL372 | **COMPLETED & TESTED** | Instantaneous vector magnitude $\|a\| = \sqrt{a_x^2 + a_y^2 + a_z^2}$, peak hold latching, shock alert ($> 5g$), and free-fall drop alert ($< 0.25g$). |
+| **PMIC & Fuel Gauge** | [`src/platform/drivers/pmic/`](file:///d:/Projects/thingy91x/src/platform/drivers/pmic/) | Nordic nPM1300 PMIC (1350 mAh Li-Po) | **COMPLETED & TESTED** | Open-Circuit Voltage (OCV) curve mapping, power draw $P = V \times I$, remaining energy $E_{\text{rem}}$, and low battery alert ($< 15\%$). |
+| **GNSS Receiver** | [`src/platform/drivers/gnss/`](file:///d:/Projects/thingy91x/src/platform/drivers/gnss/) | nRF9151 Integrated GNSS | **COMPLETED** | Latitude, Longitude, Altitude, Speed, Satellite count, and HDOP location metrics. |
+| **6-Axis IMU** | [`src/platform/drivers/imu/`](file:///d:/Projects/thingy91x/src/platform/drivers/imu/) | Bosch BMI270 (Accel + Gyro) | **COMPLETED** | High-rate 3D Acceleration and 3D Angular Velocity gyro channels. |
 
 ---
 
-### Recommended Drivers for Implementation
+### Remaining Candidate Drivers for Implementation
 
-To fully leverage the **Thingy:91 X multi-SoC hardware** (nRF9151 + nRF5340 + nRF7002) and support all application profiles defined in [`Kconfig`](file:///d:/Projects/thingy91x/Kconfig), the following drivers can be added to `src/platform/drivers/`:
-
-#### 1. Environmental Sensors (`src/platform/drivers/environment/`)
-* **Hardware Target:** Bosch **BME688** / **BMP390** / **SHTC3** (Environmental & Gas Sensors)
-* **Purpose:** Reads ambient temperature, humidity, atmospheric pressure, air quality index (IAQ), and volatile organic compounds (VOCs).
-* **Target Profile:** `APP_PROFILE_ENV_MONITOR`, `APP_PROFILE_ASSET_TRACKER`.
-* **API Functions:** `env_sensor_init()`, `env_sensor_read(struct env_data *data)`.
-
-#### 2. High-G Shock / Impact Sensor (`src/platform/drivers/high_g/`)
-* **Hardware Target:** Analog Devices **ADXL372** or Bosch **BMA400** (High-G / Low-Power Accel)
-* **Purpose:** Detects severe drops, crash impacts, or high acceleration shock events without keeping the high-power IMU running continuously. Supports wake-on-motion threshold interrupts.
+#### 1. 3-Axis Magnetometer Driver (`src/platform/drivers/magnetometer/`)
+* **Hardware Target:** Onboard 3-Axis Magnetometer (Bosch BMM150 / LIS3MDL)
+* **Purpose:** Measures 3D magnetic flux density ($B_x, B_y, B_z$ in $\mu\text{T}$), computes 2D compass heading angle $\theta_{\text{heading}} = \text{atan2}(B_y, B_x) \times \frac{180}{\pi}$, and detects magnetic tamper events.
 * **Target Profile:** `APP_PROFILE_ASSET_TRACKER`, `APP_PROFILE_TRAVEL_HISTORY`.
-* **API Functions:** `high_g_init()`, `high_g_read_peak()`, `high_g_set_trigger_threshold()`.
+* **API Functions:** `mag_sensor_init()`, `mag_sensor_read()`, `mag_sensor_get_heading()`.
 
-#### 3. Power Management & Fuel Gauge (`src/platform/drivers/pmic/` or `battery/`)
-* **Hardware Target:** Nordic **nPM1300** PMIC / ADI **MAX17048** / ADP536X
-* **Purpose:** Monitors battery State of Charge (SoC %), cell voltage, charge current, power source status (USB vs. Battery), and manages soft power rail shutdown (`CONFIG_PM_DEVICE`).
-* **Target Profile:** All application profiles (critical for power budget management).
-* **API Functions:** `battery_init()`, `battery_get_soc()`, `battery_get_voltage()`, `pmic_set_power_state()`.
+#### 2. Dual User Button Driver (`src/platform/drivers/buttons/`)
+* **Hardware Target:** Onboard Push Buttons (**BUTTON1** & **BUTTON2**)
+* **Purpose:** Debounced GPIO button interrupt handling for user input, short/long-press events, and feature mode toggling.
+* **Target Profile:** All application profiles.
+* **API Functions:** `button_driver_init()`, `button_register_callback()`.
 
-#### 4. Ambient Light & Color Sensor (`src/platform/drivers/color/` or `ambient_light/`)
-* **Hardware Target:** AMS **BH1749NVI** or OSRAM RGB/Light Sensor
-* **Purpose:** Measures ambient illuminance (lux) and RGB color channels. Useful for optical box-open / tamper detection in asset tracking or ambient light sensing.
-* **Target Profile:** `APP_PROFILE_ASSET_TRACKER`, `APP_PROFILE_ENV_MONITOR`.
-* **API Functions:** `light_sensor_init()`, `light_sensor_read_lux()`, `light_sensor_read_rgb()`.
+#### 3. RGB LED Indicator Driver (`src/platform/drivers/led/`)
+* **Hardware Target:** nPM1300 / nRF5340 PWM RGB LEDs
+* **Purpose:** Multi-color status lighting patterns (charging state, LTE network connection status, GNSS fix lock, error alerts).
+* **Target Profile:** All application profiles.
+* **API Functions:** `led_init()`, `led_set_color(r, g, b)`, `led_set_pattern(enum)`.
 
-#### 5. Wi-Fi Location Scanner (`src/platform/drivers/wifi_scan/`)
-* **Hardware Target:** Companion **nRF7002** Wi-Fi IC
-* **Purpose:** Performs passive 2.4 GHz / 5 GHz Wi-Fi SSID access point scanning to feed raw BSSID/RSSI data into cloud-based location services (e.g. nRF Cloud Wi-Fi LBS) when indoor GNSS signal is lost.
+#### 4. Wi-Fi Location Scanner (`src/platform/drivers/wifi_scan/`)
+* **Hardware Target:** Companion **nRF7002 Wi-Fi 6** IC
+* **Purpose:** Passive 2.4/5 GHz Wi-Fi access point SSID scanning for indoor location services (nRF Cloud LBS).
 * **Target Profile:** `APP_PROFILE_ASSET_TRACKER`.
 * **API Functions:** `wifi_scan_init()`, `wifi_scan_trigger()`, `wifi_scan_get_results()`.
 
-#### 6. Cellular Modem Controller (`src/platform/drivers/cellular/`)
+#### 5. Cellular Modem Controller (`src/platform/drivers/cellular/`)
 * **Hardware Target:** **nRF9151** LTE-M / NB-IoT / DECT NR+ Modem
-* **Purpose:** Encapsulates nRF Modem library calls for cellular connection management, network registration, signal quality reporting (RSRP, RSRQ, SNR, Cell ID), and flight mode control.
+* **Purpose:** Modem state control, AT interface, cellular signal quality (RSRP, RSRQ, SNR, Cell ID), and PSM/eDRX low-power management.
 * **Target Profile:** `APP_PROFILE_ASSET_TRACKER`, `APP_PROFILE_ENV_MONITOR`.
 * **API Functions:** `cellular_modem_init()`, `cellular_modem_connect()`, `cellular_modem_get_signal_info()`.
-
-#### 7. RGB LED & User Indicator Driver (`src/platform/drivers/led/`)
-* **Hardware Target:** Onboard PWM / PMIC RGB LED controller
-* **Purpose:** Controls multi-color visual feedback patterns (system state, charging status, network connection status, error alerts).
-* **Target Profile:** All application profiles (User experience & diagnostics).
-* **API Functions:** `led_init()`, `led_set_color(r, g, b)`, `led_set_pattern(pattern_enum)`.
-
-#### 8. User Button & Tamper Switch Driver (`src/platform/drivers/button/`)
-* **Hardware Target:** Push buttons / mechanical enclosure switches
-* **Purpose:** Handles debounced button presses, long-press events, and enclosure tamper detection triggers via Zephyr GPIO interrupts.
-* **Target Profile:** All application profiles.
-* **API Functions:** `button_init()`, `button_register_callback()`.
-
----
-
-### Summary Table
-
-| Proposed Driver | Driver Path | Hardware Chip | Key Use Case |
-| :--- | :--- | :--- | :--- |
-| **Environmental** | `src/platform/drivers/environment/` | BME688 / SHTC3 | Temp, Humidity, Pressure, Gas/IAQ |
-| **High-G Impact** | `src/platform/drivers/high_g/` | ADXL372 / BMA400 | Shock/Drop detection & Wake-on-motion |
-| **PMIC / Battery** | `src/platform/drivers/pmic/` | nPM1300 / MAX17048 | Battery SoC %, Voltage & Power rail management |
-| **Ambient Light** | `src/platform/drivers/ambient_light/` | BH1749NVI | Lux, RGB color, Enclosure tamper detection |
-| **Wi-Fi Scanner** | `src/platform/drivers/wifi_scan/` | nRF7002 | Wi-Fi BSSID scan for indoor location |
-| **Cellular Modem**| `src/platform/drivers/cellular/` | nRF9151 LTE modem | Signal stats, LTE-M/NB-IoT state management |
-| **RGB Indicator** | `src/platform/drivers/led/` | PMIC PWM / GPIO RGB | Status & alert lighting patterns |
-| **Button / Tamper**| `src/platform/drivers/button/` | GPIO Push Buttons | User inputs & enclosure security switch |
-
----
-
-### Next Steps
-
-No code changes have been made yet. When you are ready to proceed with implementing any of these drivers:
-1. We can select which specific driver(s) you would like to implement first.
-2. We will create matching Device Tree overlays in [`boards/thingy91x_nrf9151_ns.overlay`](file:///d:/Projects/thingy91x/boards/thingy91x_nrf9151_ns.overlay) and corresponding options in [`Kconfig`](file:///d:/Projects/thingy91x/Kconfig).
