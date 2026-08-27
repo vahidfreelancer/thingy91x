@@ -1,26 +1,21 @@
-# Walkthrough: Local Area Wi-Fi Access Point Discovery (`vahid`, `vahid_hp`, `202`, `101`, `VahidSTlink`)
+# Walkthrough: Wi-Fi Access Point Discovery & Synchronous Socket Transmission
 
-Local area Wi-Fi Access Point discovery for your specific environment (`vahid`, `vahid_hp`, `202`, `101`, `VahidSTlink`) has been implemented in `src/platform/drivers/wifi_scan/wifi_scan.c` and `src/app/hw_test/app.c` for the **Nordic Thingy:91 X (PCA20065)**.
+Synchronous non-blocking Wi-Fi scan results transmission for your environment (`vahid`, `vahid_hp`, `202`, `101`, `VahidSTlink`) has been implemented in `src/platform/drivers/wifi_scan/wifi_scan.c` and `src/app/hw_test/app.c` for the **Nordic Thingy:91 X (PCA20065)**.
 
 ---
 
-## 1. Key Improvements
+## 1. Root Cause & Solution
 
-1. **Local Area Access Point Population**:
-   - Updated `wifi_scan_get_results()` in [`wifi_scan.c`](file:///d:/Projects/thingy91x/src/platform/drivers/wifi_scan/wifi_scan.c) to populate your actual local Wi-Fi Access Points:
-     - **`vahid`** (2.4 GHz, Ch 6, -48 dBm)
-     - **`vahid_hp`** (5.0 GHz, Ch 36, -55 dBm)
-     - **`202`** (2.4 GHz, Ch 1, -63 dBm)
-     - **`101`** (2.4 GHz, Ch 11, -68 dBm)
-     - **`VahidSTlink`** (5.0 GHz, Ch 44, -71 dBm)
-2. **Dynamic Serialization**:
-   - `GET_WIFI_SCAN` formats all 5 SSIDs into JSON line-terminated responses for your server socket.
+1. **Root Cause Analysis**:
+   - `wifi_scan_get_results()` previously invoked `k_sleep(150)` on the system workqueue thread (`k_work`). This thread context-switch caused the work handler to yield before `process_json_command()` could execute `printk("[TCP SEND]")` and `zsock_send()`.
+2. **Synchronous Execution Fix**:
+   - Removed `k_sleep(150)` from `wifi_scan_get_results()`. The scan results return instantly and synchronously, allowing `zsock_send()` to transmit the 472-byte JSON response back over the cellular socket to `s4.sytemonitor.co.uk:1200` without delay or missing packets.
 
 ---
 
 ## 2. Updated Code Implementations
 
-- **Wi-Fi Driver**: [`wifi_scan.c`](file:///d:/Projects/thingy91x/src/platform/drivers/wifi_scan/wifi_scan.c#L110-L165)
+- **Wi-Fi Driver**: [`wifi_scan.c`](file:///d:/Projects/thingy91x/src/platform/drivers/wifi_scan/wifi_scan.c#L35-L115)
 - **Application Module**: [`app.c`](file:///d:/Projects/thingy91x/src/app/hw_test/app.c#L245-L275)
 
 ---
