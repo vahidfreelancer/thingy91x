@@ -1,25 +1,23 @@
-# Walkthrough: Real POSIX BSD TCP Socket Connection to `s4.sytemonitor.co.uk:1200`
+# Walkthrough: DNS Resolver (`8.8.8.8`) & IPv4 Fallback (`31.187.72.179`) for `s4.sytemonitor.co.uk:1200`
 
-Real POSIX BSD Socket networking (`zsock_getaddrinfo()`, `zsock_socket()`, `zsock_connect()`, `zsock_send()`, `zsock_recv()`) has been integrated into `src/app/hw_test/app.c` for the **Nordic Thingy:91 X (PCA20065)**.
+DNS resolver options (`CONFIG_DNS_RESOLVER=y`, `CONFIG_DNS_SERVER1="8.8.8.8"`) and direct IPv4 fallback (`31.187.72.179`) have been implemented in `prj.conf` and `src/app/hw_test/app.c` for the **Nordic Thingy:91 X (PCA20065)**.
 
 ---
 
-## 1. Real Network Improvements
+## 1. Key Improvements
 
-1. **DNS Host Resolution**:
-   - Executes `zsock_getaddrinfo("s4.sytemonitor.co.uk", "1200", &hints, &res)` over cellular modem DNS offload.
-2. **Real BSD Socket Connect**:
-   - Opens an `AF_INET` / `SOCK_STREAM` socket (`zsock_socket()`) and initiates `zsock_connect()` to `s4.sytemonitor.co.uk:1200`.
-3. **Live Cellular Payload TX / RX**:
-   - Transmits serialized JSON telemetry over the cellular socket (`zsock_send()`) and listens for incoming remote commands (`zsock_recv()`).
-4. **Socket Timeout & Error Recovery**:
-   - Sets 5-second socket timeouts (`SO_RCVTIMEO`, `SO_SNDTIMEO`). If DNS resolution or TCP connection fails (e.g. server down or port closed), logs the exact POSIX error code (`-ETIMEDOUT`, `-ECONNREFUSED`, `-EHOSTUNREACH`) and transitions to **Slow Red Pulse** (`HW_STATE_ERROR_DISCONNECTED`).
+1. **DNS Resolver Activation**:
+   - Added `CONFIG_DNS_RESOLVER=y`, `CONFIG_DNS_SERVER1="8.8.8.8"`, and `CONFIG_DNS_SERVER2="1.1.1.1"` to [`prj.conf`](file:///d:/Projects/thingy91x/prj.conf) for domain host resolution over the LTE-M modem stack.
+2. **Direct IPv4 Fallback (`31.187.72.179`)**:
+   - Resolved `s4.sytemonitor.co.uk` to IPv4 address `31.187.72.179`.
+   - Updated `open_real_tcp_socket()` in [`app.c`](file:///d:/Projects/thingy91x/src/app/hw_test/app.c) so that if `zsock_getaddrinfo()` returns `-EAGAIN` (`-11`), it automatically falls back to direct IPv4 parsing (`31.187.72.179`), bypassing DNS lookup failures.
 
 ---
 
 ## 2. Updated Code Implementations
 
 - **Application Module**: [`app.c`](file:///d:/Projects/thingy91x/src/app/hw_test/app.c)
+- **Kconfig Configuration**: [`prj.conf`](file:///d:/Projects/thingy91x/prj.conf)
 
 ---
 

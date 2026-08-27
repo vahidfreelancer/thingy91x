@@ -273,6 +273,13 @@ static void on_hw_test_button(enum button_id id, enum button_event event)
 
 static int open_real_tcp_socket(void)
 {
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(SERVER_PORT);
+
+    printk("[DNS RESOLUTION] Resolving host '%s' on port %d...\r\n", SERVER_HOST, SERVER_PORT);
+
     struct zsock_addrinfo hints = {
         .ai_family = AF_INET,
         .ai_socktype = SOCK_STREAM,
@@ -281,17 +288,20 @@ static int open_real_tcp_socket(void)
     char port_str[8];
     snprintf(port_str, sizeof(port_str), "%d", SERVER_PORT);
 
-    printk("[DNS RESOLUTION] Resolving host '%s' on port %s...\r\n", SERVER_HOST, port_str);
     int err = zsock_getaddrinfo(SERVER_HOST, port_str, &hints, &res);
-    if (err != 0 || !res) {
-        printk("[DNS ERROR] zsock_getaddrinfo failed for '%s' (err: %d)\r\n", SERVER_HOST, err);
-        return -EHOSTUNREACH;
+    if (err == 0 && res) {
+        struct sockaddr_in *in = (struct sockaddr_in *)res->ai_addr;
+        server_addr.sin_addr = in->sin_addr;
+        zsock_freeaddrinfo(res);
+        printk("[DNS SUCCESS] Host '%s' resolved successfully via DNS\r\n", SERVER_HOST);
+    } else {
+        printk("[DNS FALLBACK] zsock_getaddrinfo returned err: %d. Falling back to direct IP 31.187.72.179...\r\n", err);
+        zsock_inet_pton(AF_INET, "31.187.72.179", &server_addr.sin_addr);
     }
 
-    int fd = zsock_socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    int fd = zsock_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (fd < 0) {
         printk("[SOCKET ERROR] zsock_socket creation failed (err: %d)\r\n", errno);
-        zsock_freeaddrinfo(res);
         return -errno;
     }
 
@@ -303,9 +313,8 @@ static int open_real_tcp_socket(void)
     zsock_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     zsock_setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
-    printk("[TCP CONNECT] Executing zsock_connect() to %s:%d...\r\n", SERVER_HOST, SERVER_PORT);
-    err = zsock_connect(fd, res->ai_addr, res->ai_addrlen);
-    zsock_freeaddrinfo(res);
+    printk("[TCP CONNECT] Executing zsock_connect() to %s:1200 (31.187.72.179:1200, fd=%d)...\r\n", SERVER_HOST, fd);
+    err = zsock_connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
 
     if (err < 0) {
         printk("[TCP ERROR] zsock_connect to %s:%d failed (err: %d)\r\n", SERVER_HOST, SERVER_PORT, errno);
@@ -313,7 +322,7 @@ static int open_real_tcp_socket(void)
         return -errno;
     }
 
-    printk("[TCP CONNECT SUCCESS] Real POSIX BSD socket connected to %s:%d (fd=%d)\r\n",
+    printk("[TCP CONNECT SUCCESS] Real POSIX BSD socket connected to %s:%d (31.187.72.179:1200, fd=%d)\r\n",
            SERVER_HOST, SERVER_PORT, fd);
     return fd;
 }
