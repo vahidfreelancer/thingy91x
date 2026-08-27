@@ -1,8 +1,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/net/socket.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #include "app.h"
 #include "app_config.h"
@@ -19,6 +21,7 @@
 LOG_MODULE_REGISTER(app_hw_test);
 
 static struct k_work_delayable hw_test_work;
+static int client_fd = -1;
 static bool socket_active = false;
 static bool connecting_requested = false;
 static uint32_t connect_attempts = 0;
@@ -220,10 +223,6 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             cell_meta.operator_name, cell_meta.rat_name, cell_meta.band_number, cell_meta.tac, cell_meta.ip_address,
             cell_neighbors.station_count, cell_neighbors.stations[0].cell_id, cell_neighbors.stations[0].rsrp_dbm);
     }
-    else if (strstr(cmd_json, "SET_LED_PATTERN")) {
-        snprintf(resp_buf, max_len,
-            "{\"status\":\"SUCCESS\",\"cmd\":\"SET_LED_PATTERN\",\"pattern\":\"BLINK_FAST\",\"rgb\":[0,0,255]}");
-    }
     else {
         /* Default ALL SENSORS Summary JSON */
         snprintf(resp_buf, max_len,
@@ -244,6 +243,16 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
     printk("[TCP SEND s4.sytemonitor.co.uk:1200] Response Serialized (%u bytes): %s\r\n",
            (unsigned int)strlen(resp_buf), resp_buf);
 
+    /* Send payload over real POSIX BSD socket if active */
+    if (client_fd >= 0) {
+        int sent = zsock_send(client_fd, resp_buf, strlen(resp_buf), 0);
+        if (sent < 0) {
+            printk("[TCP SEND ERROR] zsock_send failed (err: %d)\r\n", errno);
+        } else {
+            printk("[TCP TX SUCCESS] Transmitted %d bytes over cellular socket to s4.sytemonitor.co.uk:1200\r\n", sent);
+        }
+    }
+
     /* Return to Solid Cyan LED to reflect established TCP socket connection */
     set_hw_test_led_state(HW_STATE_SOCKET_CONNECTED);
 }
@@ -252,7 +261,7 @@ static void on_hw_test_button(enum button_id id, enum button_event event)
 {
     const char *btn_name = (id == BUTTON_ID_1) ? "BUTTON1" : "BUTTON2";
     printk("\r\n=================================================\r\n");
-    printk("[USER ACTION] %s Pressed! Initiating TCP connection to %s:%d...\r\n", btn_name, SERVER_HOST, SERVER_PORT);
+    printk("[USER ACTION] %s Pressed! Initiating real TCP connection to %s:%d...\r\n", btn_name, SERVER_HOST, SERVER_PORT);
     printk("=================================================\r\n");
 
     /* Set LED to Fast Blue Blinking during TCP socket handshake */
@@ -260,6 +269,53 @@ static void on_hw_test_button(enum button_id id, enum button_event event)
 
     connecting_requested = true;
     connect_attempts = 0;
+}
+
+static int open_real_tcp_socket(void)
+{
+    struct zsock_addrinfo hints = {
+        .ai_family = AF_INET,
+        .ai_socktype = SOCK_STREAM,
+    };
+    struct zsock_addrinfo *res = NULL;
+    char port_str[8];
+    snprintf(port_str, sizeof(port_str), "%d", SERVER_PORT);
+
+    printk("[DNS RESOLUTION] Resolving host '%s' on port %s...\r\n", SERVER_HOST, port_str);
+    int err = zsock_getaddrinfo(SERVER_HOST, port_str, &hints, &res);
+    if (err != 0 || !res) {
+        printk("[DNS ERROR] zsock_getaddrinfo failed for '%s' (err: %d)\r\n", SERVER_HOST, err);
+        return -EHOSTUNREACH;
+    }
+
+    int fd = zsock_socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (fd < 0) {
+        printk("[SOCKET ERROR] zsock_socket creation failed (err: %d)\r\n", errno);
+        zsock_freeaddrinfo(res);
+        return -errno;
+    }
+
+    /* Set 5-second socket read/write timeouts */
+    struct timeval timeout = {
+        .tv_sec = 5,
+        .tv_usec = 0
+    };
+    zsock_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    zsock_setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+
+    printk("[TCP CONNECT] Executing zsock_connect() to %s:%d...\r\n", SERVER_HOST, SERVER_PORT);
+    err = zsock_connect(fd, res->ai_addr, res->ai_addrlen);
+    zsock_freeaddrinfo(res);
+
+    if (err < 0) {
+        printk("[TCP ERROR] zsock_connect to %s:%d failed (err: %d)\r\n", SERVER_HOST, SERVER_PORT, errno);
+        zsock_close(fd);
+        return -errno;
+    }
+
+    printk("[TCP CONNECT SUCCESS] Real POSIX BSD socket connected to %s:%d (fd=%d)\r\n",
+           SERVER_HOST, SERVER_PORT, fd);
+    return fd;
 }
 
 static void hw_test_work_handler(struct k_work *work)
@@ -293,22 +349,23 @@ static void hw_test_work_handler(struct k_work *work)
 
     if (connecting_requested) {
         connect_attempts++;
-        printk("[TCP CONNECTING attempt #%u] Resolving host '%s' on port %d...\r\n",
+        printk("[TCP CONNECTING attempt #%u] Opening real cellular socket to %s:%d...\r\n",
                connect_attempts, SERVER_HOST, SERVER_PORT);
 
-        if (connect_attempts <= 3) {
-            /* Simulate socket handshake in progress */
-            printk("[TCP HANDSHAKE] Opening socket to %s:%d...\r\n", SERVER_HOST, SERVER_PORT);
+        int fd = open_real_tcp_socket();
+        if (fd >= 0) {
+            client_fd = fd;
             socket_active = true;
             connecting_requested = false;
             set_hw_test_led_state(HW_STATE_SOCKET_CONNECTED);
             printk("[TCP SUCCESS] Socket active on %s:%d -> Transitioning to Solid Cyan Glow\r\n", SERVER_HOST, SERVER_PORT);
         } else {
-            /* Handshake timeout / error fallback */
+            client_fd = -1;
             socket_active = false;
             connecting_requested = false;
             set_hw_test_led_state(HW_STATE_ERROR_DISCONNECTED);
-            printk("[TCP ERROR] Connection to %s:%d failed (-ETIMEDOUT) -> Transitioning to Red Pulse\r\n", SERVER_HOST, SERVER_PORT);
+            printk("[TCP ERROR] Connection to %s:%d failed (%d) -> Transitioning to Slow Red Pulse\r\n",
+                   SERVER_HOST, SERVER_PORT, fd);
         }
     }
 
@@ -316,9 +373,27 @@ static void hw_test_work_handler(struct k_work *work)
         printk("--- TCP SOCKET ACTIVE [%s:%d] ---\r\n", SERVER_HOST, SERVER_PORT);
         printk("Listening for incoming JSON diagnostic test commands...\r\n");
 
+        static char rx_buf[512];
         static char json_resp[1024];
 
-        /* Cycle diagnostic test commands */
+        /* Check for incoming data over real BSD socket */
+        if (client_fd >= 0) {
+            int recved = zsock_recv(client_fd, rx_buf, sizeof(rx_buf) - 1, ZSOCK_MSG_DONTWAIT);
+            if (recved > 0) {
+                rx_buf[recved] = '\0';
+                printk("[REAL TCP RECV] Received %d bytes from %s:%d: %s\r\n",
+                       recved, SERVER_HOST, SERVER_PORT, rx_buf);
+                process_json_command(rx_buf, json_resp, sizeof(json_resp));
+            } else if (recved < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                printk("[REAL TCP RX DISCONNECT] Connection closed by remote host (err: %d)\r\n", errno);
+                zsock_close(client_fd);
+                client_fd = -1;
+                socket_active = false;
+                set_hw_test_led_state(HW_STATE_ERROR_DISCONNECTED);
+            }
+        }
+
+        /* Also allow local serial terminal diagnostic command execution */
         static uint8_t cmd_step = 0;
         cmd_step++;
 
@@ -370,7 +445,7 @@ int app_init(void)
 void app_run(void)
 {
     printk("Running Hardware Diagnostic & Remote Test Suite Application...\r\n");
-    printk(">>> PRESS BUTTON1 or BUTTON2 to open TCP Socket to %s:%d <<<\r\n", SERVER_HOST, SERVER_PORT);
+    printk(">>> PRESS BUTTON1 or BUTTON2 to open real TCP Socket to %s:%d <<<\r\n", SERVER_HOST, SERVER_PORT);
 
     k_work_reschedule(&hw_test_work, K_NO_WAIT);
 
