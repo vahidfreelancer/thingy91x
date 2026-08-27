@@ -81,7 +81,7 @@ static void set_hw_test_led_state(enum hw_test_led_state state)
 
 /**
  * @brief Handle incoming TCP JSON commands from s4.sytemonitor.co.uk:1200
- * and serialize JSON responses containing raw values, calculated values, and measurement units.
+ * and serialize line-delimited JSON responses (\n) for remote server stream parsers.
  */
 static void process_json_command(const char *cmd_json, char *resp_buf, size_t max_len)
 {
@@ -94,7 +94,7 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
 
     if (strstr(cmd_json, "PING")) {
         snprintf(resp_buf, max_len,
-            "{\"status\":\"SUCCESS\",\"cmd\":\"PING\",\"board\":\"Thingy:91 X PCA20065\",\"uptime_sec\":%u,\"units\":{\"uptime\":\"sec\"}}",
+            "{\"status\":\"SUCCESS\",\"cmd\":\"PING\",\"board\":\"Thingy:91 X PCA20065\",\"uptime_sec\":%u,\"units\":{\"uptime\":\"sec\"}}\n",
             (unsigned int)(k_uptime_get() / 1000));
     }
     else if (strstr(cmd_json, "GET_ENV_DATA")) {
@@ -110,7 +110,7 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             "\"pressure\":{\"raw_pa\":%u,\"calculated\":%.2f,\"unit\":\"hPa\"},"
             "\"gas_resistance\":{\"raw_ohm\":%u,\"calculated\":%.0f,\"unit\":\"Ohm\"},"
             "\"iaq_index\":{\"calculated\":%u,\"unit\":\"IAQ_0_500\"}"
-            "}}",
+            "}}\n",
             raw_temp_adc, (double)env_data.temperature,
             (unsigned int)(env_data.humidity * 10.0f), (double)env_data.humidity,
             raw_press_pa, (double)env_data.pressure,
@@ -131,7 +131,7 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             "\"magnitude\":{\"calculated_g\":%.2f,\"unit\":\"g\"},"
             "\"peak_hold\":{\"calculated_g\":%.2f,\"unit\":\"g\"},"
             "\"impact_detected\":%s,\"freefall_detected\":%s"
-            "}}",
+            "}}\n",
             raw_ax, (double)motion_data.accel_x, (double)(motion_data.accel_x * 9.80665f),
             raw_ay, (double)motion_data.accel_y, (double)(motion_data.accel_y * 9.80665f),
             raw_az, (double)motion_data.accel_z, (double)(motion_data.accel_z * 9.80665f),
@@ -153,7 +153,7 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             "\"magnitude\":{\"calculated_ut\":%.2f,\"unit\":\"uT\"},"
             "\"compass_heading\":{\"calculated_deg\":%.2f,\"unit\":\"deg\"},"
             "\"tamper_detected\":%s"
-            "}}",
+            "}}\n",
             raw_mx, (double)mag_data.mag_x_ut,
             raw_my, (double)mag_data.mag_y_ut,
             raw_mz, (double)mag_data.mag_z_ut,
@@ -171,7 +171,7 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             "\"fused_pitch\":{\"calculated\":%.2f,\"unit\":\"deg\"},"
             "\"fused_yaw_heading\":{\"calculated\":%.2f,\"unit\":\"deg\"},"
             "\"gyro_bias\":{\"bx\":%.4f,\"by\":%.4f,\"bz\":%.4f,\"unit\":\"rad/s\"}"
-            "}}",
+            "}}\n",
             (double)ekf_filter.q[0], (double)ekf_filter.q[1],
             (double)ekf_filter.q[2], (double)ekf_filter.q[3],
             (double)r, (double)p, (double)y,
@@ -188,7 +188,7 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             "\"state_of_charge\":{\"calculated_pct\":%.1f,\"unit\":\"%%\"},"
             "\"remaining_capacity\":{\"calculated_mah\":%u,\"unit\":\"mAh\"},"
             "\"low_battery_alert\":%s"
-            "}}",
+            "}}\n",
             batt_data.voltage_mv, (double)(batt_data.voltage_mv / 1000.0f),
             batt_data.current_ma, batt_data.current_ma,
             (double)batt_data.power_mw, (double)batt_data.soc_percent,
@@ -203,7 +203,7 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             "\"ap_count\":%u,"
             "\"ap_1\":{\"ssid\":\"%s\",\"bssid\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"rssi\":%d,\"unit\":\"dBm\",\"channel\":%u,\"band\":\"5GHz\"},"
             "\"ap_2\":{\"ssid\":\"%s\",\"bssid\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"rssi\":%d,\"unit\":\"dBm\",\"channel\":%u,\"band\":\"2.4GHz\"}"
-            "}}",
+            "}}\n",
             wifi_data.ap_count,
             wifi_data.results[0].ssid, wifi_data.results[0].bssid[0], wifi_data.results[0].bssid[1], wifi_data.results[0].bssid[2], wifi_data.results[0].bssid[3], wifi_data.results[0].bssid[4], wifi_data.results[0].bssid[5], wifi_data.results[0].rssi_dbm, wifi_data.results[0].channel,
             wifi_data.results[1].ssid, wifi_data.results[1].bssid[0], wifi_data.results[1].bssid[1], wifi_data.results[1].bssid[2], wifi_data.results[1].bssid[3], wifi_data.results[1].bssid[4], wifi_data.results[1].bssid[5], wifi_data.results[1].rssi_dbm, wifi_data.results[1].channel);
@@ -218,7 +218,7 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             "\"signal\":{\"rsrp\":%d,\"unit_rsrp\":\"dBm\",\"rsrq\":%d,\"unit_rsrq\":\"dB\",\"snr\":%d,\"unit_snr\":\"dB\",\"cell_id\":\"0x%08X\"},"
             "\"network\":{\"operator\":\"%s\",\"rat\":\"%s\",\"band\":%u,\"tac\":%u,\"ip\":\"%s\"},"
             "\"neighbors\":{\"station_count\":%u,\"station_1_cell_id\":\"0x%08X\",\"station_1_rsrp\":%d,\"unit_rsrp\":\"dBm\"}"
-            "}}",
+            "}}\n",
             cell_info.rsrp_dbm, cell_info.rsrq_db, cell_info.snr_db, cell_info.cell_id,
             cell_meta.operator_name, cell_meta.rat_name, cell_meta.band_number, cell_meta.tac, cell_meta.ip_address,
             cell_neighbors.station_count, cell_neighbors.stations[0].cell_id, cell_neighbors.stations[0].rsrp_dbm);
@@ -232,7 +232,7 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             "\"mag\":{\"mag_ut\":%.2f,\"heading_deg\":%.2f},"
             "\"battery\":{\"v_mv\":%u,\"soc_pct\":%.1f},"
             "\"cellular\":{\"rsrp_dbm\":%d,\"cell_id\":\"0x%08X\"}"
-            "}}",
+            "}}\n",
             (double)env_data.temperature, (double)env_data.humidity, (double)env_data.pressure,
             (double)motion_data.magnitude, (double)motion_data.peak_g,
             (double)mag_data.magnitude_ut, (double)mag_data.heading_deg,
@@ -240,16 +240,16 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             cell_info.rsrp_dbm, cell_info.cell_id);
     }
 
-    printk("[TCP SEND s4.sytemonitor.co.uk:1200] Response Serialized (%u bytes): %s\r\n",
+    printk("[TCP SEND s4.sytemonitor.co.uk:1200] Response Serialized (%u bytes): %s",
            (unsigned int)strlen(resp_buf), resp_buf);
 
-    /* Send payload over real POSIX BSD socket if active */
+    /* Send line-terminated payload over real POSIX BSD socket if active */
     if (client_fd >= 0 && client_fd != 999) {
         int sent = zsock_send(client_fd, resp_buf, strlen(resp_buf), 0);
         if (sent < 0) {
             printk("[TCP SEND ERROR] zsock_send failed (err: %d)\r\n", errno);
         } else {
-            printk("[TCP TX SUCCESS] Transmitted %d bytes over cellular socket to s4.sytemonitor.co.uk:1200\r\n", sent);
+            printk("[TCP TX SUCCESS] Transmitted %d bytes (line-delimited \\n) over cellular socket to s4.sytemonitor.co.uk:1200\r\n", sent);
         }
     }
 
