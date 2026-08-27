@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 #include <errno.h>
 
 #include "app.h"
@@ -20,13 +21,18 @@
 
 LOG_MODULE_REGISTER(app_hw_test);
 
+#define INACTIVITY_TIMEOUT_MS  60000ULL  /* 60 seconds of inactivity triggers deep sleep */
+#define ALTITUDE_EMA_ALPHA     0.15f      /* Exponential Moving Average smoothing factor */
+
 static struct k_work_delayable hw_test_work;
 static int client_fd = -1;
 static bool socket_active = false;
 static bool connecting_requested = false;
 static uint32_t connect_attempts = 0;
+static int64_t last_activity_timestamp = 0;
+static bool is_deep_sleep_active = false;
 
-/* Sensor state caching structures */
+/* Sensor state caching & filtering structures */
 static struct env_sensor_data env_data;
 static struct high_g_data motion_data;
 static struct pmic_battery_data batt_data;
@@ -37,12 +43,17 @@ static struct cellular_network_metadata cell_meta;
 static struct cellular_neighbor_scan cell_neighbors;
 static struct ekf_state ekf_filter;
 
+static float altitude_raw_m = 0.0f;
+static float altitude_filtered_m = 0.0f;
+static bool altitude_filter_initialized = false;
+
 enum hw_test_led_state {
     HW_STATE_IDLE_DISCONNECTED = 0, /**< Green Breathing: Idle system power OK, waiting for button press */
     HW_STATE_CONNECTING_TCP,        /**< Rapid Blue Blinking: Initiating network attach & TCP socket connect */
     HW_STATE_SOCKET_CONNECTED,       /**< Solid Cyan: TCP socket connected to s4.sytemonitor.co.uk:1200 */
     HW_STATE_PROCESSING_COMMAND,    /**< Rapid Magenta Flashes: Receiving JSON command & transmitting response */
-    HW_STATE_ERROR_DISCONNECTED     /**< Slow Red Pulse: Error / Socket disconnection alert */
+    HW_STATE_ERROR_DISCONNECTED,    /**< Slow Red Pulse: Error / Socket disconnection alert */
+    HW_STATE_DEEP_SLEEP             /**< LED OFF: Ultra low-power deep sleep mode after 60s inactivity */
 };
 
 static enum hw_test_led_state current_led_state = HW_STATE_IDLE_DISCONNECTED;
@@ -76,6 +87,34 @@ static void set_hw_test_led_state(enum hw_test_led_state state)
             LOG_INF("[LED STATE] ERROR_DISCONNECTED -> Slow Red Pulse (R:255, G:0, B:0)");
             led_set_pattern(LED_PATTERN_BLINK_SLOW, 255, 0, 0);
             break;
+        case HW_STATE_DEEP_SLEEP:
+            printk("\r\n[LED STATE] DEEP_SLEEP -> LED OFF (System Suspend)\r\n");
+            LOG_INF("[LED STATE] DEEP_SLEEP -> LED OFF (System Suspend)");
+            led_set_pattern(LED_PATTERN_OFF, 0, 0, 0);
+            break;
+    }
+}
+
+/**
+ * @brief Calculate barometric altitude (meters) from station pressure (hPa)
+ * and apply Exponential Moving Average (EMA) low-pass filtering.
+ */
+static void calculate_filtered_altitude(float pressure_hpa)
+{
+    if (pressure_hpa <= 0.0f) {
+        return;
+    }
+
+    /* Standard International Barometric Formula: h = 44330.77 * (1 - (P / 1013.25)^(1/5.25588)) */
+    altitude_raw_m = 44330.77f * (1.0f - powf(pressure_hpa / 1013.25f, 0.190295f));
+
+    if (!altitude_filter_initialized) {
+        altitude_filtered_m = altitude_raw_m;
+        altitude_filter_initialized = true;
+    } else {
+        /* EMA Low-pass filter to smooth atmospheric noise */
+        altitude_filtered_m = (ALTITUDE_EMA_ALPHA * altitude_raw_m) +
+                             ((1.0f - ALTITUDE_EMA_ALPHA) * altitude_filtered_m);
     }
 }
 
@@ -86,6 +125,9 @@ static void set_hw_test_led_state(enum hw_test_led_state state)
 static void process_json_command(const char *cmd_json, char *resp_buf, size_t max_len)
 {
     if (!cmd_json || !resp_buf) return;
+
+    /* Update last activity timestamp on command arrival */
+    last_activity_timestamp = k_uptime_get();
 
     /* Flash Magenta LED to indicate active JSON command processing */
     set_hw_test_led_state(HW_STATE_PROCESSING_COMMAND);
@@ -99,6 +141,8 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
     }
     else if (strstr(cmd_json, "GET_ENV_DATA")) {
         env_sensor_read(&env_data);
+        calculate_filtered_altitude(env_data.pressure);
+
         int32_t raw_temp_adc = (int32_t)(env_data.temperature * 100.0f);
         uint32_t raw_press_pa = (uint32_t)(env_data.pressure * 100.0f);
         uint32_t raw_gas_ohm = (uint32_t)env_data.gas_resistance;
@@ -108,12 +152,14 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             "\"temperature\":{\"raw_adc\":%d,\"calculated\":%.2f,\"unit\":\"degC\"},"
             "\"humidity\":{\"raw_adc\":%u,\"calculated\":%.2f,\"unit\":\"%%RH\"},"
             "\"pressure\":{\"raw_pa\":%u,\"calculated\":%.2f,\"unit\":\"hPa\"},"
+            "\"altitude\":{\"calculated_m\":%.2f,\"filtered_m\":%.2f,\"unit\":\"m\"},"
             "\"gas_resistance\":{\"raw_ohm\":%u,\"calculated\":%.0f,\"unit\":\"Ohm\"},"
             "\"iaq_index\":{\"calculated\":%u,\"unit\":\"IAQ_0_500\"}"
             "}}\n",
             raw_temp_adc, (double)env_data.temperature,
             (unsigned int)(env_data.humidity * 10.0f), (double)env_data.humidity,
             raw_press_pa, (double)env_data.pressure,
+            (double)altitude_raw_m, (double)altitude_filtered_m,
             raw_gas_ohm, (double)env_data.gas_resistance,
             env_data.iaq_index);
     }
@@ -225,15 +271,18 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
     }
     else {
         /* Default ALL SENSORS Summary JSON */
+        env_sensor_read(&env_data);
+        calculate_filtered_altitude(env_data.pressure);
+
         snprintf(resp_buf, max_len,
             "{\"status\":\"SUCCESS\",\"cmd\":\"GET_ALL_SENSORS\",\"data\":{"
-            "\"env\":{\"temp_degC\":%.2f,\"humidity_pct\":%.2f,\"press_hpa\":%.2f},"
+            "\"env\":{\"temp_degC\":%.2f,\"humidity_pct\":%.2f,\"press_hpa\":%.2f,\"alt_filtered_m\":%.2f},"
             "\"motion\":{\"mag_g\":%.2f,\"peak_g\":%.2f},"
             "\"mag\":{\"mag_ut\":%.2f,\"heading_deg\":%.2f},"
             "\"battery\":{\"v_mv\":%u,\"soc_pct\":%.1f},"
             "\"cellular\":{\"rsrp_dbm\":%d,\"cell_id\":\"0x%08X\"}"
             "}}\n",
-            (double)env_data.temperature, (double)env_data.humidity, (double)env_data.pressure,
+            (double)env_data.temperature, (double)env_data.humidity, (double)env_data.pressure, (double)altitude_filtered_m,
             (double)motion_data.magnitude, (double)motion_data.peak_g,
             (double)mag_data.magnitude_ut, (double)mag_data.heading_deg,
             batt_data.voltage_mv, (double)batt_data.soc_percent,
@@ -260,9 +309,22 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
 static void on_hw_test_button(enum button_id id, enum button_event event)
 {
     const char *btn_name = (id == BUTTON_ID_1) ? "BUTTON1" : "BUTTON2";
-    printk("\r\n=================================================\r\n");
-    printk("[USER ACTION] %s Pressed! Initiating real TCP connection to %s:%d...\r\n", btn_name, SERVER_HOST, SERVER_PORT);
-    printk("=================================================\r\n");
+
+    if (is_deep_sleep_active) {
+        printk("\r\n=================================================\r\n");
+        printk("[WAKEUP INTERRUPT] %s Pressed! Waking system from DEEP SLEEP...\r\n", btn_name);
+        printk("=================================================\r\n");
+
+        is_deep_sleep_active = false;
+        cellular_modem_connect(CELLULAR_MODE_LTE_M);
+    } else {
+        printk("\r\n=================================================\r\n");
+        printk("[USER ACTION] %s Pressed! Initiating real TCP connection to %s:%d...\r\n", btn_name, SERVER_HOST, SERVER_PORT);
+        printk("=================================================\r\n");
+    }
+
+    /* Reset 60s inactivity timer */
+    last_activity_timestamp = k_uptime_get();
 
     /* Set LED to Fast Blue Blinking during TCP socket handshake */
     set_hw_test_led_state(HW_STATE_CONNECTING_TCP);
@@ -336,12 +398,19 @@ static void hw_test_work_handler(struct k_work *work)
     led_update();
     buttons_update();
 
+    if (is_deep_sleep_active) {
+        /* Device suspended in deep sleep; await BUTTON1 wakeup interrupt */
+        k_work_reschedule(&hw_test_work, K_SECONDS(TELEMETRY_SAMPLE_INTERVAL_SEC));
+        return;
+    }
+
     const char *state_names[] = {
         "IDLE_DISCONNECTED (Green Breathing)",
         "CONNECTING_TCP (Blue Blinking)",
         "SOCKET_CONNECTED (Solid Cyan Glow)",
         "PROCESSING_COMMAND (Magenta Flashes)",
-        "ERROR_DISCONNECTED (Red Pulse)"
+        "ERROR_DISCONNECTED (Red Pulse)",
+        "DEEP_SLEEP (LED OFF)"
     };
 
     /* Query network status for serial heartbeat log */
@@ -351,10 +420,36 @@ static void hw_test_work_handler(struct k_work *work)
     const char *op_name = (cell_meta.operator_name[0] != '\0') ? cell_meta.operator_name : "Searching Cellular...";
     const char *ip_addr = (cell_meta.ip_address[0] != '\0') ? cell_meta.ip_address : "0.0.0.0";
 
+    int64_t idle_duration_ms = k_uptime_get() - last_activity_timestamp;
+    uint32_t seconds_until_sleep = (idle_duration_ms >= INACTIVITY_TIMEOUT_MS) ? 0 :
+        (uint32_t)((INACTIVITY_TIMEOUT_MS - idle_duration_ms) / 1000);
+
     /* Periodic 1-second Serial UART Heartbeat directly on COM port */
-    printk("[HEARTBEAT #%u] Uptime: %us | LED State: %s | LTE Signal: %d dBm (%s) | IP: %s\r\n",
+    printk("[HEARTBEAT #%u] Uptime: %us | LED State: %s | Idle: %us (Sleep in %us) | LTE: %d dBm (%s) | IP: %s\r\n",
            heartbeat_cnt, (unsigned int)(k_uptime_get() / 1000),
-           state_names[current_led_state], cell_info.rsrp_dbm, op_name, ip_addr);
+           state_names[current_led_state], (unsigned int)(idle_duration_ms / 1000), seconds_until_sleep,
+           cell_info.rsrp_dbm, op_name, ip_addr);
+
+    /* Check for 60-second inactivity deep sleep transition */
+    if (socket_active && idle_duration_ms >= INACTIVITY_TIMEOUT_MS) {
+        printk("\r\n=============================================================\r\n");
+        printk("[INACTIVITY TIMEOUT] No commands received for >60s. Entering DEEP SLEEP...\r\n");
+        printk(">>> PRESS BUTTON1 to wake up and reconnect socket <<<\r\n");
+        printk("=============================================================\r\n");
+
+        if (client_fd >= 0 && client_fd != 999) {
+            zsock_close(client_fd);
+        }
+        client_fd = -1;
+        socket_active = false;
+        is_deep_sleep_active = true;
+
+        cellular_modem_sleep();
+        set_hw_test_led_state(HW_STATE_DEEP_SLEEP);
+
+        k_work_reschedule(&hw_test_work, K_SECONDS(TELEMETRY_SAMPLE_INTERVAL_SEC));
+        return;
+    }
 
     if (connecting_requested) {
         connect_attempts++;
@@ -366,6 +461,7 @@ static void hw_test_work_handler(struct k_work *work)
             client_fd = fd;
             socket_active = true;
             connecting_requested = false;
+            last_activity_timestamp = k_uptime_get();
             set_hw_test_led_state(HW_STATE_SOCKET_CONNECTED);
             printk("[TCP SUCCESS] Socket active on %s:%d -> Transitioning to Solid Cyan Glow\r\n", SERVER_HOST, SERVER_PORT);
         } else {
@@ -379,13 +475,10 @@ static void hw_test_work_handler(struct k_work *work)
     }
 
     if (socket_active) {
-        printk("--- TCP SOCKET ACTIVE [%s:%d] ---\r\n", SERVER_HOST, SERVER_PORT);
-        printk("Listening for incoming JSON diagnostic test commands...\r\n");
-
         static char rx_buf[512];
         static char json_resp[1024];
 
-        /* Check for incoming data over real BSD socket */
+        /* Check for incoming command data over real BSD socket */
         if (client_fd >= 0 && client_fd != 999) {
             int recved = zsock_recv(client_fd, rx_buf, sizeof(rx_buf) - 1, ZSOCK_MSG_DONTWAIT);
             if (recved > 0) {
@@ -401,24 +494,6 @@ static void hw_test_work_handler(struct k_work *work)
                 set_hw_test_led_state(HW_STATE_ERROR_DISCONNECTED);
             }
         }
-
-        /* Also allow local serial terminal diagnostic command execution */
-        static uint8_t cmd_step = 0;
-        cmd_step++;
-
-        const char *test_cmds[] = {
-            "{\"cmd\":\"PING\"}",
-            "{\"cmd\":\"GET_ENV_DATA\"}",
-            "{\"cmd\":\"GET_MOTION_DATA\"}",
-            "{\"cmd\":\"GET_MAG_DATA\"}",
-            "{\"cmd\":\"GET_EKF_FUSION\"}",
-            "{\"cmd\":\"GET_BATTERY_DATA\"}",
-            "{\"cmd\":\"GET_WIFI_SCAN\"}",
-            "{\"cmd\":\"GET_CELLULAR_INFO\"}"
-        };
-
-        const char *active_cmd = test_cmds[cmd_step % 8];
-        process_json_command(active_cmd, json_resp, sizeof(json_resp));
     }
 
     k_work_reschedule(&hw_test_work, K_SECONDS(TELEMETRY_SAMPLE_INTERVAL_SEC));
@@ -427,8 +502,9 @@ static void hw_test_work_handler(struct k_work *work)
 int app_init(void)
 {
     printk("\r\n=============================================================\r\n");
-    printk("Initializing Hardware Diagnostic & Test Suite Profile (APP_PROFILE_HW_TEST)\r\n");
+    printk("Initializing Hardware Diagnostic & Command Responsive Profile (APP_PROFILE_HW_TEST)\r\n");
     printk("Target Server: %s | Port: %d\r\n", SERVER_HOST, SERVER_PORT);
+    printk("Inactivity Timeout: 60 Seconds -> Deep Sleep\r\n");
     printk("=============================================================\r\n");
 
     /* Wake up and initialize all 9 onboard hardware drivers */
@@ -444,6 +520,8 @@ int app_init(void)
     cellular_modem_connect(CELLULAR_MODE_LTE_M);
     ekf_fusion_init(&ekf_filter);
 
+    last_activity_timestamp = k_uptime_get();
+
     /* Initial Green Breathing pattern for IDLE_DISCONNECTED state */
     set_hw_test_led_state(HW_STATE_IDLE_DISCONNECTED);
 
@@ -453,8 +531,8 @@ int app_init(void)
 
 void app_run(void)
 {
-    printk("Running Hardware Diagnostic & Remote Test Suite Application...\r\n");
-    printk(">>> PRESS BUTTON1 or BUTTON2 to open TCP Socket to %s:%d <<<\r\n", SERVER_HOST, SERVER_PORT);
+    printk("Running Command Responsive Diagnostic Application...\r\n");
+    printk(">>> PRESS BUTTON1 to open TCP Socket to %s:%d <<<\r\n", SERVER_HOST, SERVER_PORT);
 
     k_work_reschedule(&hw_test_work, K_NO_WAIT);
 
