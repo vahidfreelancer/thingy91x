@@ -23,16 +23,12 @@ static float calculate_soc_from_ocv(uint16_t voltage_mv)
     if (voltage_mv >= 4200) {
         return 100.0f;
     } else if (voltage_mv >= 4000) {
-        /* 4000mV to 4200mV -> 80% to 100% */
         return 80.0f + ((float)(voltage_mv - 4000) / 200.0f) * 20.0f;
     } else if (voltage_mv >= 3800) {
-        /* 3800mV to 4000mV -> 40% to 80% */
         return 40.0f + ((float)(voltage_mv - 3800) / 200.0f) * 40.0f;
     } else if (voltage_mv >= 3600) {
-        /* 3600mV to 3800mV -> 10% to 40% */
         return 10.0f + ((float)(voltage_mv - 3600) / 200.0f) * 30.0f;
     } else if (voltage_mv >= 3000) {
-        /* 3000mV to 3600mV -> 0% to 10% */
         return ((float)(voltage_mv - 3000) / 600.0f) * 10.0f;
     } else {
         return 0.0f;
@@ -50,10 +46,11 @@ int pmic_init(void)
     pmic_dev = DEVICE_DT_GET_ANY(adi_adp5360);
 #endif
 
-    if (pmic_dev && device_is_ready(pmic_dev)) {
+    /* Safely verify device readiness AND sensor API pointer presence */
+    if (pmic_dev && device_is_ready(pmic_dev) && pmic_dev->api) {
         LOG_INF("PMIC Fuel Gauge device '%s' initialized successfully.", pmic_dev->name);
     } else {
-        LOG_WRN("Physical PMIC fuel gauge unattached or not ready. Falling back to software simulation.");
+        LOG_WRN("Physical PMIC fuel gauge sensor API unattached. Falling back to software simulation.");
         pmic_dev = NULL;
     }
 
@@ -66,32 +63,24 @@ int pmic_read(struct pmic_battery_data *data)
         return -EINVAL;
     }
 
-    if (!pmic_dev) {
+    if (!pmic_dev || !device_is_ready(pmic_dev) || !pmic_dev->api) {
         /* Realistic software simulation of LiPo battery discharge & power math */
-        static float sim_voltage = 4150.0f;  /* Starting 4.15V (~95% SoC) */
+        static float sim_voltage = 4150.0f;
         static double step = 0.0;
         step += 1.0;
 
-        /* Simulate gradual voltage decay during operation */
         sim_voltage -= 2.5f;
         if (sim_voltage < 3300.0f) {
-            sim_voltage = 4150.0f; /* Reset simulation loop */
+            sim_voltage = 4150.0f;
         }
 
         data->voltage_mv = (uint16_t)sim_voltage;
-        data->current_ma = -45; /* Discharging at -45 mA */
+        data->current_ma = -45;
         data->charge_status = PMIC_DISCHARGING;
 
-        /* Calculate SoC % using OCV interpolation formula */
         data->soc_percent = calculate_soc_from_ocv(data->voltage_mv);
-
-        /* Calculate Instantaneous Power P = V * |I| / 1000 in mW */
         data->power_mw = ((float)data->voltage_mv * (float)abs(data->current_ma)) / 1000.0f;
-
-        /* Calculate Remaining Capacity = C_nom * (SoC / 100) */
         data->remaining_capacity_mah = (uint16_t)((float)NOMINAL_BATTERY_CAPACITY_MAH * (data->soc_percent / 100.0f));
-
-        /* Check low battery alert threshold */
         data->low_battery_alert = (data->soc_percent < LOW_BATTERY_ALERT_THRESHOLD);
         data->valid = true;
 
@@ -103,7 +92,7 @@ int pmic_read(struct pmic_battery_data *data)
         return 0;
     }
 
-    /* Read Hardware Fuel Gauge Channels */
+    /* Read Hardware Fuel Gauge Channels safely */
     struct sensor_value val_v, val_i;
     int err = sensor_sample_fetch(pmic_dev);
     if (err < 0) {
@@ -113,20 +102,17 @@ int pmic_read(struct pmic_battery_data *data)
     }
 
     if (sensor_channel_get(pmic_dev, SENSOR_CHAN_GAUGE_VOLTAGE, &val_v) == 0) {
-        /* Zephyr voltage is in Volts; convert to mV */
         data->voltage_mv = (uint16_t)(sensor_value_to_double(&val_v) * 1000.0);
     } else {
         data->voltage_mv = 3700;
     }
 
     if (sensor_channel_get(pmic_dev, SENSOR_CHAN_GAUGE_AVG_CURRENT, &val_i) == 0) {
-        /* Zephyr current is in Amps; convert to mA */
         data->current_ma = (int16_t)(sensor_value_to_double(&val_i) * 1000.0);
     } else {
         data->current_ma = -20;
     }
 
-    /* Compute SoC % */
     struct sensor_value val_soc;
     if (sensor_channel_get(pmic_dev, SENSOR_CHAN_GAUGE_STATE_OF_CHARGE, &val_soc) == 0) {
         data->soc_percent = (float)sensor_value_to_double(&val_soc);
@@ -134,13 +120,9 @@ int pmic_read(struct pmic_battery_data *data)
         data->soc_percent = calculate_soc_from_ocv(data->voltage_mv);
     }
 
-    /* Power Calculation P = V * |I| / 1000 (mW) */
     data->power_mw = ((float)data->voltage_mv * (float)abs(data->current_ma)) / 1000.0f;
-
-    /* Remaining Capacity = Capacity * (SoC / 100) */
     data->remaining_capacity_mah = (uint16_t)((float)NOMINAL_BATTERY_CAPACITY_MAH * (data->soc_percent / 100.0f));
 
-    /* Charge status determination */
     if (data->current_ma > 5) {
         data->charge_status = (data->soc_percent >= 99.0f) ? PMIC_CHARGED : PMIC_CHARGING;
     } else {
@@ -165,7 +147,7 @@ int pmic_set_rail_state(bool enable)
 
 int pmic_sleep(void)
 {
-    if (!pmic_dev) {
+    if (!pmic_dev || !device_is_ready(pmic_dev)) {
         LOG_DBG("[SIM] PMIC driver entered low power state.");
         return 0;
     }
