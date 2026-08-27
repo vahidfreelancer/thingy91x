@@ -242,6 +242,7 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             batt_data.low_battery_alert ? "true" : "false");
     }
     else if (strstr(cmd_json, "GET_WIFI_SCAN")) {
+        wifi_scan_trigger();
         wifi_scan_get_results(&wifi_data);
 
         if (wifi_data.ap_count == 0) {

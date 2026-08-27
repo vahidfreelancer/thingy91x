@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#include <thingy91x_wifi.dtsi>
+
 /*
  * Device Tree Overlay Template for Nordic Thingy:91 X (nRF9151 NS target)
  * Use this file to customize pin routing, sensor configurations, and enabled buses.
