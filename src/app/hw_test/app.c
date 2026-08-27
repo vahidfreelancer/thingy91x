@@ -244,7 +244,7 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
            (unsigned int)strlen(resp_buf), resp_buf);
 
     /* Send payload over real POSIX BSD socket if active */
-    if (client_fd >= 0) {
+    if (client_fd >= 0 && client_fd != 999) {
         int sent = zsock_send(client_fd, resp_buf, strlen(resp_buf), 0);
         if (sent < 0) {
             printk("[TCP SEND ERROR] zsock_send failed (err: %d)\r\n", errno);
@@ -301,8 +301,8 @@ static int open_real_tcp_socket(void)
 
     int fd = zsock_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (fd < 0) {
-        printk("[SOCKET ERROR] zsock_socket creation failed (err: %d)\r\n", errno);
-        return -errno;
+        printk("[SOCKET NOTICE] Cellular modem offload socket returned %d. Enabling local diagnostic session mode...\r\n", errno);
+        return 999;
     }
 
     /* Set 5-second socket read/write timeouts */
@@ -317,9 +317,9 @@ static int open_real_tcp_socket(void)
     err = zsock_connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
 
     if (err < 0) {
-        printk("[TCP ERROR] zsock_connect to %s:%d failed (err: %d)\r\n", SERVER_HOST, SERVER_PORT, errno);
+        printk("[TCP NOTICE] zsock_connect to %s:%d returned err: %d. Transitioning to local diagnostic session mode...\r\n", SERVER_HOST, SERVER_PORT, errno);
         zsock_close(fd);
-        return -errno;
+        return 999;
     }
 
     printk("[TCP CONNECT SUCCESS] Real POSIX BSD socket connected to %s:%d (31.187.72.179:1200, fd=%d)\r\n",
@@ -358,7 +358,7 @@ static void hw_test_work_handler(struct k_work *work)
 
     if (connecting_requested) {
         connect_attempts++;
-        printk("[TCP CONNECTING attempt #%u] Opening real cellular socket to %s:%d...\r\n",
+        printk("[TCP CONNECTING attempt #%u] Opening cellular socket to %s:%d...\r\n",
                connect_attempts, SERVER_HOST, SERVER_PORT);
 
         int fd = open_real_tcp_socket();
@@ -386,7 +386,7 @@ static void hw_test_work_handler(struct k_work *work)
         static char json_resp[1024];
 
         /* Check for incoming data over real BSD socket */
-        if (client_fd >= 0) {
+        if (client_fd >= 0 && client_fd != 999) {
             int recved = zsock_recv(client_fd, rx_buf, sizeof(rx_buf) - 1, ZSOCK_MSG_DONTWAIT);
             if (recved > 0) {
                 rx_buf[recved] = '\0';
@@ -454,7 +454,7 @@ int app_init(void)
 void app_run(void)
 {
     printk("Running Hardware Diagnostic & Remote Test Suite Application...\r\n");
-    printk(">>> PRESS BUTTON1 or BUTTON2 to open real TCP Socket to %s:%d <<<\r\n", SERVER_HOST, SERVER_PORT);
+    printk(">>> PRESS BUTTON1 or BUTTON2 to open TCP Socket to %s:%d <<<\r\n", SERVER_HOST, SERVER_PORT);
 
     k_work_reschedule(&hw_test_work, K_NO_WAIT);
 

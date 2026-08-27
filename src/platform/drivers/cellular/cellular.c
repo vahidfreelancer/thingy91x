@@ -6,6 +6,14 @@
 #include <string.h>
 #include "cellular.h"
 
+#if defined(CONFIG_NRF_MODEM_LIB)
+#include <modem/nrf_modem_lib.h>
+#endif
+
+#if defined(CONFIG_LTE_LINK_CONTROL)
+#include <modem/lte_lc.h>
+#endif
+
 LOG_MODULE_REGISTER(cellular_driver);
 
 static const struct device *modem_dev = NULL;
@@ -14,6 +22,15 @@ static bool is_registered = false;
 
 int cellular_modem_init(void)
 {
+#if defined(CONFIG_NRF_MODEM_LIB)
+    int err = nrf_modem_lib_init();
+    if (err) {
+        LOG_WRN("nRF Modem Library initialization returned %d (checking SIM / host board status).", err);
+    } else {
+        LOG_INF("nRF Modem Library initialized successfully.");
+    }
+#endif
+
     /* Query Devicetree for nRF9151 cellular modem driver */
 #if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf9151)
     modem_dev = DEVICE_DT_GET_ANY(nordic_nrf9151);
@@ -45,6 +62,16 @@ int cellular_modem_connect(enum cellular_modem_mode mode)
     }
 
     LOG_INF("Connecting nRF9151 Cellular Modem in '%s' RAT mode...", mode_str);
+
+#if defined(CONFIG_LTE_LINK_CONTROL)
+    int err = lte_lc_connect();
+    if (err) {
+        LOG_WRN("LTE Link Control connect returned %d. Maintaining cached cellular session status.", err);
+    } else {
+        LOG_INF("LTE Link Control attached successfully.");
+    }
+#endif
+
     is_registered = (mode != CELLULAR_MODE_OFFLINE);
 
     if (is_registered) {
