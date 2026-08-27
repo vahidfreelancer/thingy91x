@@ -244,15 +244,30 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
     else if (strstr(cmd_json, "GET_WIFI_SCAN")) {
         wifi_scan_get_results(&wifi_data);
 
-        snprintf(resp_buf, max_len,
-            "{\"status\":\"SUCCESS\",\"cmd\":\"GET_WIFI_SCAN\",\"data\":{"
-            "\"ap_count\":%u,"
-            "\"ap_1\":{\"ssid\":\"%s\",\"bssid\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"rssi\":%d,\"unit\":\"dBm\",\"channel\":%u,\"band\":\"5GHz\"},"
-            "\"ap_2\":{\"ssid\":\"%s\",\"bssid\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"rssi\":%d,\"unit\":\"dBm\",\"channel\":%u,\"band\":\"2.4GHz\"}"
-            "}}\n",
-            wifi_data.ap_count,
-            wifi_data.results[0].ssid, wifi_data.results[0].bssid[0], wifi_data.results[0].bssid[1], wifi_data.results[0].bssid[2], wifi_data.results[0].bssid[3], wifi_data.results[0].bssid[4], wifi_data.results[0].bssid[5], wifi_data.results[0].rssi_dbm, wifi_data.results[0].channel,
-            wifi_data.results[1].ssid, wifi_data.results[1].bssid[0], wifi_data.results[1].bssid[1], wifi_data.results[1].bssid[2], wifi_data.results[1].bssid[3], wifi_data.results[1].bssid[4], wifi_data.results[1].bssid[5], wifi_data.results[1].rssi_dbm, wifi_data.results[1].channel);
+        if (wifi_data.ap_count == 0) {
+            snprintf(resp_buf, max_len,
+                "{\"status\":\"SUCCESS\",\"cmd\":\"GET_WIFI_SCAN\",\"data\":{"
+                "\"ap_count\":0,\"message\":\"No Wi-Fi SSIDs in range\""
+                "}}\n");
+        } else {
+            char ap_list_buf[512] = "";
+            size_t offset = 0;
+            for (uint32_t i = 0; i < wifi_data.ap_count && i < 5; i++) {
+                offset += snprintf(ap_list_buf + offset, sizeof(ap_list_buf) - offset,
+                    "%s\"ap_%u\":{\"ssid\":\"%s\",\"bssid\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"rssi\":%d,\"unit\":\"dBm\",\"channel\":%u,\"band\":\"%s\"}",
+                    (i > 0) ? "," : "", i + 1,
+                    wifi_data.results[i].ssid,
+                    wifi_data.results[i].bssid[0], wifi_data.results[i].bssid[1], wifi_data.results[i].bssid[2],
+                    wifi_data.results[i].bssid[3], wifi_data.results[i].bssid[4], wifi_data.results[i].bssid[5],
+                    wifi_data.results[i].rssi_dbm, wifi_data.results[i].channel,
+                    (wifi_data.results[i].band == 1) ? "5GHz" : "2.4GHz");
+            }
+            snprintf(resp_buf, max_len,
+                "{\"status\":\"SUCCESS\",\"cmd\":\"GET_WIFI_SCAN\",\"data\":{"
+                "\"ap_count\":%u,%s"
+                "}}\n",
+                wifi_data.ap_count, ap_list_buf);
+        }
     }
     else if (strstr(cmd_json, "GET_CELLULAR_INFO")) {
         cellular_modem_get_signal_info(&cell_info);
