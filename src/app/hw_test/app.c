@@ -49,22 +49,27 @@ static void set_hw_test_led_state(enum hw_test_led_state state)
     current_led_state = state;
     switch (state) {
         case HW_STATE_IDLE_DISCONNECTED:
+            printk("\r\n[LED STATE] IDLE_DISCONNECTED -> Green Breathing (R:0, G:255, B:0)\r\n");
             LOG_INF("[LED STATE] IDLE_DISCONNECTED -> Green Breathing (R:0, G:255, B:0)");
             led_set_pattern(LED_PATTERN_BREATHE, 0, 255, 0);
             break;
         case HW_STATE_CONNECTING_TCP:
+            printk("\r\n[LED STATE] CONNECTING_TCP -> Fast Blue Blinking (R:0, G:128, B:255)\r\n");
             LOG_INF("[LED STATE] CONNECTING_TCP -> Fast Blue Blinking (R:0, G:128, B:255)");
             led_set_pattern(LED_PATTERN_BLINK_FAST, 0, 128, 255);
             break;
         case HW_STATE_SOCKET_CONNECTED:
+            printk("\r\n[LED STATE] SOCKET_CONNECTED -> Solid Cyan Glow (R:0, G:255, B:255)\r\n");
             LOG_INF("[LED STATE] SOCKET_CONNECTED -> Solid Cyan Glow (R:0, G:255, B:255)");
             led_set_pattern(LED_PATTERN_SOLID, 0, 255, 255);
             break;
         case HW_STATE_PROCESSING_COMMAND:
+            printk("\r\n[LED STATE] PROCESSING_COMMAND -> Fast Magenta Flashes (R:255, G:0, B:255)\r\n");
             LOG_INF("[LED STATE] PROCESSING_COMMAND -> Fast Magenta Flashes (R:255, G:0, B:255)");
             led_set_pattern(LED_PATTERN_BLINK_FAST, 255, 0, 255);
             break;
         case HW_STATE_ERROR_DISCONNECTED:
+            printk("\r\n[LED STATE] ERROR_DISCONNECTED -> Slow Red Pulse (R:255, G:0, B:0)\r\n");
             LOG_INF("[LED STATE] ERROR_DISCONNECTED -> Slow Red Pulse (R:255, G:0, B:0)");
             led_set_pattern(LED_PATTERN_BLINK_SLOW, 255, 0, 0);
             break;
@@ -82,7 +87,7 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
     /* Flash Magenta LED to indicate active JSON command processing */
     set_hw_test_led_state(HW_STATE_PROCESSING_COMMAND);
 
-    LOG_INF("[TCP RECV s4.sytemonitor.co.uk:1200] Raw Command: %s", cmd_json);
+    printk("\r\n[TCP RECV s4.sytemonitor.co.uk:1200] Raw Command: %s\r\n", cmd_json);
 
     if (strstr(cmd_json, "PING")) {
         snprintf(resp_buf, max_len,
@@ -236,8 +241,8 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
             cell_info.rsrp_dbm, cell_info.cell_id);
     }
 
-    LOG_INF("[TCP SEND s4.sytemonitor.co.uk:1200] Response Serialized (%u bytes): %s",
-            (unsigned int)strlen(resp_buf), resp_buf);
+    printk("[TCP SEND s4.sytemonitor.co.uk:1200] Response Serialized (%u bytes): %s\r\n",
+           (unsigned int)strlen(resp_buf), resp_buf);
 
     /* Return to Solid Cyan LED to reflect established TCP socket connection */
     set_hw_test_led_state(HW_STATE_SOCKET_CONNECTED);
@@ -246,9 +251,9 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
 static void on_hw_test_button(enum button_id id, enum button_event event)
 {
     const char *btn_name = (id == BUTTON_ID_1) ? "BUTTON1" : "BUTTON2";
-    LOG_INF("=================================================");
-    LOG_INF("[USER ACTION] %s Pressed! Initiating TCP connection to %s:%d...", btn_name, SERVER_HOST, SERVER_PORT);
-    LOG_INF("=================================================");
+    printk("\r\n=================================================\r\n");
+    printk("[USER ACTION] %s Pressed! Initiating TCP connection to %s:%d...\r\n", btn_name, SERVER_HOST, SERVER_PORT);
+    printk("=================================================\r\n");
 
     /* Set LED to Fast Blue Blinking during TCP socket handshake */
     set_hw_test_led_state(HW_STATE_CONNECTING_TCP);
@@ -282,38 +287,38 @@ static void hw_test_work_handler(struct k_work *work)
     const char *ip_addr = (cell_meta.ip_address[0] != '\0') ? cell_meta.ip_address : "0.0.0.0";
 
     /* Periodic 1-second Serial UART Heartbeat directly on COM port */
-    LOG_INF("[HEARTBEAT #%u] Uptime: %us | LED State: %s | LTE Signal: %d dBm (%s) | IP: %s",
-            heartbeat_cnt, (unsigned int)(k_uptime_get() / 1000),
-            state_names[current_led_state], cell_info.rsrp_dbm, op_name, ip_addr);
+    printk("[HEARTBEAT #%u] Uptime: %us | LED State: %s | LTE Signal: %d dBm (%s) | IP: %s\r\n",
+           heartbeat_cnt, (unsigned int)(k_uptime_get() / 1000),
+           state_names[current_led_state], cell_info.rsrp_dbm, op_name, ip_addr);
 
     if (connecting_requested) {
         connect_attempts++;
-        LOG_INF("[TCP CONNECTING attempt #%u] Resolving host '%s' on port %d...",
-                connect_attempts, SERVER_HOST, SERVER_PORT);
+        printk("[TCP CONNECTING attempt #%u] Resolving host '%s' on port %d...\r\n",
+               connect_attempts, SERVER_HOST, SERVER_PORT);
 
         if (connect_attempts <= 3) {
             /* Simulate socket handshake in progress */
-            LOG_INF("[TCP HANDSHAKE] Opening socket to %s:%d...", SERVER_HOST, SERVER_PORT);
+            printk("[TCP HANDSHAKE] Opening socket to %s:%d...\r\n", SERVER_HOST, SERVER_PORT);
             socket_active = true;
             connecting_requested = false;
             set_hw_test_led_state(HW_STATE_SOCKET_CONNECTED);
-            LOG_INF("[TCP SUCCESS] Socket active on %s:%d -> Transitioning to Solid Cyan Glow", SERVER_HOST, SERVER_PORT);
+            printk("[TCP SUCCESS] Socket active on %s:%d -> Transitioning to Solid Cyan Glow\r\n", SERVER_HOST, SERVER_PORT);
         } else {
             /* Handshake timeout / error fallback */
             socket_active = false;
             connecting_requested = false;
             set_hw_test_led_state(HW_STATE_ERROR_DISCONNECTED);
-            LOG_ERR("[TCP ERROR] Connection to %s:%d failed (-ETIMEDOUT) -> Transitioning to Red Pulse", SERVER_HOST, SERVER_PORT);
+            printk("[TCP ERROR] Connection to %s:%d failed (-ETIMEDOUT) -> Transitioning to Red Pulse\r\n", SERVER_HOST, SERVER_PORT);
         }
     }
 
     if (socket_active) {
-        LOG_INF("--- TCP SOCKET ACTIVE [%s:%d] ---", SERVER_HOST, SERVER_PORT);
-        LOG_INF("Listening for incoming JSON diagnostic test commands...");
+        printk("--- TCP SOCKET ACTIVE [%s:%d] ---\r\n", SERVER_HOST, SERVER_PORT);
+        printk("Listening for incoming JSON diagnostic test commands...\r\n");
 
         static char json_resp[1024];
 
-        /* Cycle diagnostic test commands: GET_ENV_DATA, GET_MOTION_DATA, GET_MAG_DATA, GET_EKF_FUSION, GET_BATTERY_DATA, GET_WIFI_SCAN, GET_CELLULAR_INFO */
+        /* Cycle diagnostic test commands */
         static uint8_t cmd_step = 0;
         cmd_step++;
 
@@ -337,10 +342,10 @@ static void hw_test_work_handler(struct k_work *work)
 
 int app_init(void)
 {
-    LOG_INF("=============================================================");
-    LOG_INF("Initializing Hardware Diagnostic & Test Suite Profile (APP_PROFILE_HW_TEST)");
-    LOG_INF("Target Server: %s | Port: %d", SERVER_HOST, SERVER_PORT);
-    LOG_INF("=============================================================");
+    printk("\r\n=============================================================\r\n");
+    printk("Initializing Hardware Diagnostic & Test Suite Profile (APP_PROFILE_HW_TEST)\r\n");
+    printk("Target Server: %s | Port: %d\r\n", SERVER_HOST, SERVER_PORT);
+    printk("=============================================================\r\n");
 
     /* Wake up and initialize all 9 onboard hardware drivers */
     env_sensor_init();
@@ -364,8 +369,8 @@ int app_init(void)
 
 void app_run(void)
 {
-    LOG_INF("Running Hardware Diagnostic & Remote Test Suite Application...");
-    LOG_INF(">>> PRESS BUTTON1 or BUTTON2 to open TCP Socket to %s:%d <<<", SERVER_HOST, SERVER_PORT);
+    printk("Running Hardware Diagnostic & Remote Test Suite Application...\r\n");
+    printk(">>> PRESS BUTTON1 or BUTTON2 to open TCP Socket to %s:%d <<<\r\n", SERVER_HOST, SERVER_PORT);
 
     k_work_reschedule(&hw_test_work, K_NO_WAIT);
 
