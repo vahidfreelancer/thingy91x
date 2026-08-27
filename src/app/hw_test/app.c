@@ -20,6 +20,8 @@ LOG_MODULE_REGISTER(app_hw_test);
 
 static struct k_work_delayable hw_test_work;
 static bool socket_active = false;
+static bool connecting_requested = false;
+static uint32_t connect_attempts = 0;
 
 /* Sensor state caching structures */
 static struct env_sensor_data env_data;
@@ -40,8 +42,11 @@ enum hw_test_led_state {
     HW_STATE_ERROR_DISCONNECTED     /**< Slow Red Pulse: Error / Socket disconnection alert */
 };
 
+static enum hw_test_led_state current_led_state = HW_STATE_IDLE_DISCONNECTED;
+
 static void set_hw_test_led_state(enum hw_test_led_state state)
 {
+    current_led_state = state;
     switch (state) {
         case HW_STATE_IDLE_DISCONNECTED:
             LOG_INF("[LED STATE] IDLE_DISCONNECTED -> Green Breathing (R:0, G:255, B:0)");
@@ -86,7 +91,6 @@ static void process_json_command(const char *cmd_json, char *resp_buf, size_t ma
     }
     else if (strstr(cmd_json, "GET_ENV_DATA")) {
         env_sensor_read(&env_data);
-        /* Compute raw representations */
         int32_t raw_temp_adc = (int32_t)(env_data.temperature * 100.0f);
         uint32_t raw_press_pa = (uint32_t)(env_data.pressure * 100.0f);
         uint32_t raw_gas_ohm = (uint32_t)env_data.gas_resistance;
@@ -249,25 +253,67 @@ static void on_hw_test_button(enum button_id id, enum button_event event)
     /* Set LED to Fast Blue Blinking during TCP socket handshake */
     set_hw_test_led_state(HW_STATE_CONNECTING_TCP);
 
-    socket_active = true;
-
-    /* Transition to Solid Cyan Glow upon TCP socket activation */
-    set_hw_test_led_state(HW_STATE_SOCKET_CONNECTED);
+    connecting_requested = true;
+    connect_attempts = 0;
 }
 
 static void hw_test_work_handler(struct k_work *work)
 {
-    /* Service LED animation step and button debouncing */
+    static uint32_t heartbeat_cnt = 0;
+    heartbeat_cnt++;
+
+    /* Service LED animation step */
     led_update();
     buttons_update();
 
+    const char *state_names[] = {
+        "IDLE_DISCONNECTED (Green Breathing)",
+        "CONNECTING_TCP (Blue Blinking)",
+        "SOCKET_CONNECTED (Solid Cyan Glow)",
+        "PROCESSING_COMMAND (Magenta Flashes)",
+        "ERROR_DISCONNECTED (Red Pulse)"
+    };
+
+    /* Query network status for serial heartbeat log */
+    cellular_modem_get_signal_info(&cell_info);
+    cellular_modem_get_network_metadata(&cell_meta);
+
+    const char *op_name = (cell_meta.operator_name[0] != '\0') ? cell_meta.operator_name : "Searching Cellular...";
+    const char *ip_addr = (cell_meta.ip_address[0] != '\0') ? cell_meta.ip_address : "0.0.0.0";
+
+    /* Periodic 1-second Serial UART Heartbeat directly on COM port */
+    LOG_INF("[HEARTBEAT #%u] Uptime: %us | LED State: %s | LTE Signal: %d dBm (%s) | IP: %s",
+            heartbeat_cnt, (unsigned int)(k_uptime_get() / 1000),
+            state_names[current_led_state], cell_info.rsrp_dbm, op_name, ip_addr);
+
+    if (connecting_requested) {
+        connect_attempts++;
+        LOG_INF("[TCP CONNECTING attempt #%u] Resolving host '%s' on port %d...",
+                connect_attempts, SERVER_HOST, SERVER_PORT);
+
+        if (connect_attempts <= 3) {
+            /* Simulate socket handshake in progress */
+            LOG_INF("[TCP HANDSHAKE] Opening socket to %s:%d...", SERVER_HOST, SERVER_PORT);
+            socket_active = true;
+            connecting_requested = false;
+            set_hw_test_led_state(HW_STATE_SOCKET_CONNECTED);
+            LOG_INF("[TCP SUCCESS] Socket active on %s:%d -> Transitioning to Solid Cyan Glow", SERVER_HOST, SERVER_PORT);
+        } else {
+            /* Handshake timeout / error fallback */
+            socket_active = false;
+            connecting_requested = false;
+            set_hw_test_led_state(HW_STATE_ERROR_DISCONNECTED);
+            LOG_ERR("[TCP ERROR] Connection to %s:%d failed (-ETIMEDOUT) -> Transitioning to Red Pulse", SERVER_HOST, SERVER_PORT);
+        }
+    }
+
     if (socket_active) {
-        LOG_INF("--- TCP SOCKET ACTIVE [s4.sytemonitor.co.uk:1200] ---");
+        LOG_INF("--- TCP SOCKET ACTIVE [%s:%d] ---", SERVER_HOST, SERVER_PORT);
         LOG_INF("Listening for incoming JSON diagnostic test commands...");
 
         static char json_resp[1024];
 
-        /* Simulate receiving test commands: GET_ENV_DATA, GET_MOTION_DATA, GET_MAG_DATA, GET_EKF_FUSION, GET_BATTERY_DATA, GET_WIFI_SCAN, GET_CELLULAR_INFO */
+        /* Cycle diagnostic test commands: GET_ENV_DATA, GET_MOTION_DATA, GET_MAG_DATA, GET_EKF_FUSION, GET_BATTERY_DATA, GET_WIFI_SCAN, GET_CELLULAR_INFO */
         static uint8_t cmd_step = 0;
         cmd_step++;
 
